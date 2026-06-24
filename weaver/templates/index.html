@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAMPlux-Weaver</title>
+<style>
+  :root {
+    --bg:      #0e1210;
+    --surface: #161c18;
+    --surface2:#1e2820;
+    --border:  #263028;
+    --accent:  #3aab8f;
+    --accent2: #2a8a72;
+    --text:    #c8d8d0;
+    --muted:   #4a6458;
+    --ok:      #4caf7d;
+    --warn:    #e8b43a;
+    --err:     #e05252;
+    --radius:  8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 18px 28px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  header h1 { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: .4px; }
+  header p  { color: var(--muted); font-size: 12px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    height: calc(100vh - 57px);
+  }
+
+  /* ── Left panel ── */
+  .panel {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .panel-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .panel-footer {
+    padding: 14px 18px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* section labels */
+  .sec-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .9px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  /* file list */
+  .file-section-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .file-section-header span { flex: 1; }
+  .pill-count {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .file-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    margin-bottom: 5px;
+  }
+  .file-item:hover            { border-color: var(--accent); background: rgba(58,171,143,.04); }
+  .file-item.selected         { border-color: var(--accent); background: rgba(58,171,143,.08); }
+  .file-item input[type=checkbox] { accent-color: var(--accent); width: 13px; height: 13px; margin-top: 2px; flex-shrink: 0; cursor: pointer; }
+  .file-name  { font-size: 12px; font-weight: 600; word-break: break-all; }
+  .file-meta  { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .file-badge {
+    font-size: 9px; font-weight: 600;
+    padding: 1px 5px; border-radius: 3px;
+    background: rgba(58,171,143,.12);
+    color: var(--accent);
+    border: 1px solid rgba(58,171,143,.25);
+    margin-left: 4px; vertical-align: middle;
+  }
+  .empty-note { font-size: 11px; color: var(--muted); padding: 6px 2px; }
+
+  /* upload zone */
+  .upload-zone {
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    text-align: center;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--muted);
+    transition: border-color .15s, color .15s;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); color: var(--accent); }
+  #file-input { display: none; }
+
+  /* settings */
+  input[type=text], input[type=number], textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 7px 9px;
+    font-size: 12px;
+    outline: none;
+    transition: border-color .15s;
+    font-family: inherit;
+  }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 52px; line-height: 1.5; }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field-label {
+    font-size: 10px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .tip-icon {
+    cursor: help;
+    color: var(--border);
+    font-size: 11px;
+    transition: color .15s;
+  }
+  .tip-icon:hover { color: var(--muted); }
+
+  /* toggle switch */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .toggle-row-label { font-size: 12px; font-weight: 600; }
+  .switch { position: relative; display: inline-block; width: 34px; height: 19px; }
+  .switch input { display: none; }
+  .slider {
+    position: absolute; cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--border);
+    border-radius: 10px;
+    transition: .2s;
+  }
+  .slider::before {
+    content: "";
+    position: absolute;
+    height: 13px; width: 13px;
+    left: 3px; bottom: 3px;
+    background: var(--muted);
+    border-radius: 50%;
+    transition: .2s;
+  }
+  input:checked + .slider { background: var(--accent); }
+  input:checked + .slider::before { transform: translateX(15px); background: #fff; }
+  .sub-settings { display: flex; flex-direction: column; gap: 8px; }
+  .sub-settings.hidden { display: none; }
+
+  /* details / accordion */
+  details { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  details summary {
+    padding: 9px 12px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .7px;
+    color: var(--muted);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    user-select: none;
+  }
+  details summary::after { content: '+'; font-size: 14px; font-weight: 400; }
+  details[open] summary::after { content: '−'; }
+  details[open] summary { border-bottom: 1px solid var(--border); }
+  .detail-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* build button */
+  .btn-build {
+    width: 100%;
+    padding: 11px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: .3px;
+    transition: background .15s;
+  }
+  .btn-build:hover    { background: var(--accent2); }
+  .btn-build:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+
+  /* ── Right panel ── */
+  .main {
+    padding: 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow: hidden;
+  }
+
+  .log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .log-header h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  #clear-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; }
+  #clear-btn:hover { color: var(--text); }
+
+  /* progress bar */
+  #progress-wrap {
+    display: none;
+    flex-direction: column;
+    gap: 5px;
+  }
+  #progress-wrap.visible { display: flex; }
+  #progress-bar-track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  #progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width .3s ease;
+    width: 0%;
+  }
+  #progress-label { font-size: 10px; color: var(--muted); }
+
+  #log {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    overflow-y: auto;
+    font-family: 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.65;
+  }
+  .ll { padding: 1px 0; }
+  .ll.info  { color: var(--text); }
+  .ll.warn  { color: var(--warn); }
+  .ll.error { color: var(--err); }
+  .ll.ok    { color: var(--ok); font-weight: 600; }
+  .ll.dim   { color: var(--muted); }
+
+  /* result box */
+  #result-box {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    background: var(--surface);
+  }
+  #result-box.visible { display: flex; }
+  .result-stats {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat-val { font-size: 20px; font-weight: 700; color: var(--ok); font-variant-numeric: tabular-nums; }
+  .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .result-actions { display: flex; gap: 8px; }
+  .btn-dl {
+    padding: 8px 16px;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity .15s;
+    display: inline-block;
+  }
+  .btn-dl:hover { opacity: .85; }
+  .btn-dl.primary   { background: var(--ok);     color: #fff; }
+  .btn-dl.secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+  /* scrollbars */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🕷️ CAMPlux-Weaver</h1>
+  <p>CAMPlux &mdash; red de conceptos desde corpus de prensa</p>
+</header>
+
+<div class="layout">
+
+  <!-- ── LEFT: controls ── -->
+  <div class="panel">
+    <div class="panel-scroll">
+
+      <!-- File selection -->
+      <div>
+        <div class="sec-label">Archivos a procesar</div>
+
+        <!-- CulpemCorpus files -->
+        <div class="file-section-header">
+          <span>🦊 CulpemCorpus/output</span>
+          <span class="pill-count" id="culpem-count">—</span>
+        </div>
+        <div id="culpem-files">
+          <div class="empty-note">Buscando archivos…</div>
+        </div>
+
+        <!-- Yene archives -->
+        <div class="file-section-header" style="margin-top:12px">
+          <span>🐋 YeneConservatio</span>
+          <span class="pill-count" id="yene-count">—</span>
+        </div>
+        <div id="yene-files">
+          <div class="empty-note">Buscando archivos Yene…</div>
+        </div>
+
+        <!-- Uploads -->
+        <div class="file-section-header" style="margin-top:12px">
+          <span>📁 Subidos</span>
+          <span class="pill-count" id="upload-count">0</span>
+        </div>
+        <div id="upload-files">
+          <div class="empty-note" id="no-uploads-note">Ningún archivo subido aún.</div>
+        </div>
+
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()"
+             ondragover="e=>{e.preventDefault();this.classList.add('drag')}"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handleDrop(event)">
+          + Agregar CSV (click o arrastra aquí)
+        </div>
+        <input type="file" id="file-input" accept=".csv" onchange="uploadFile(this.files[0])">
+      </div>
+
+      <!-- Settings -->
+      <div>
+        <div class="sec-label">Configuración</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+
+          <!-- Corpus params -->
+          <details open>
+            <summary>Corpus &amp; vocabulario</summary>
+            <div class="detail-body">
+              <div class="row2">
+                <div class="field">
+                  <div class="field-label">
+                    Frecuencia mínima
+                    <span class="tip-icon" title="Mínimo de artículos en que debe aparecer una palabra para incluirla como nodo. Sube para una red más pequeña.">ⓘ</span>
+                  </div>
+                  <input type="number" id="min_doc_freq" value="30" min="1" max="9999">
+                </div>
+                <div class="field">
+                  <div class="field-label">
+                    Largo mínimo de palabra
+                    <span class="tip-icon" title="Descarta palabras con menos caracteres que este valor.">ⓘ</span>
+                  </div>
+                  <input type="number" id="min_word_len" value="4" min="2" max="12">
+                </div>
+              </div>
+              <div class="field">
+                <div class="field-label">
+                  Stopwords adicionales
+                  <span class="tip-icon" title="Palabras separadas por comas que quieres excluir aunque no estén en la lista por defecto.">ⓘ</span>
+                </div>
+                <textarea id="extra_stopwords" placeholder="ej: punta, arenas, región"></textarea>
+              </div>
+            </div>
+          </details>
+
+          <!-- Network params -->
+          <details open>
+            <summary>Red &amp; aristas</summary>
+            <div class="detail-body">
+              <div class="field">
+                <div class="field-label">
+                  Umbral Jaccard
+                  <span class="tip-icon" title="Similitud mínima para crear una arista entre dos palabras. Rango 0–1. Sube para una red más escasa y limpia; baja para más conexiones.">ⓘ</span>
+                </div>
+                <input type="number" id="min_jaccard" value="0.12" min="0.01" max="1" step="0.01">
+              </div>
+              <div style="font-size:10px;color:var(--muted);line-height:1.5">
+                Jaccard = co-ocurrencias / (docs_A + docs_B − co-ocurrencias).<br>
+                Típico: 0.10 (denso) · 0.15 (moderado) · 0.25 (escaso)
+              </div>
+            </div>
+          </details>
+
+          <!-- Lemmatization -->
+          <details open>
+            <summary>Lematización</summary>
+            <div class="detail-body">
+              <div class="toggle-row">
+                <span class="toggle-row-label">Activar lematización</span>
+                <label class="switch">
+                  <input type="checkbox" id="use_lemma" checked onchange="toggleSub('lemma-sub', this.checked)">
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="sub-settings" id="lemma-sub">
+                <div style="font-size:10px;color:var(--muted);line-height:1.5">
+                  Reduce formas flexionadas a su base léxica:<br>
+                  <em>técnicos → técnico · energías → energía · climático → climático</em><br>
+                  Modelo: spaCy <code style="color:var(--accent)">es_core_news_sm</code>
+                  &nbsp;·&nbsp; ~1 min para 2.000 artículos
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <!-- N-grams -->
+          <details open>
+            <summary>N-gramas / colocaciones</summary>
+            <div class="detail-body">
+              <div class="toggle-row">
+                <span class="toggle-row-label">Activar detección</span>
+                <label class="switch">
+                  <input type="checkbox" id="use_ngrams" checked onchange="toggleSub('ngram-sub', this.checked)">
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="sub-settings" id="ngram-sub">
+                <div style="font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:4px">
+                  Une palabras que co-ocurren significativamente más que por azar (PMI).<br>
+                  <em>punta + arenas → punta_arenas · cambio + climático → cambio_climático</em>
+                </div>
+                <div class="row2">
+                  <div class="field">
+                    <div class="field-label">
+                      Frecuencia mínima frase
+                      <span class="tip-icon" title="Número mínimo de veces que debe aparecer el par para considerarlo colocación.">ⓘ</span>
+                    </div>
+                    <input type="number" id="phrase_min_count" value="15" min="2" max="500">
+                  </div>
+                  <div class="field">
+                    <div class="field-label">
+                      Umbral PMI
+                      <span class="tip-icon" title="Controla cuán estrictamente se exige que las palabras vayan juntas. Más alto = menos frases detectadas.">ⓘ</span>
+                    </div>
+                    <input type="number" id="phrase_threshold" value="8" min="1" max="50" step="0.5">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </details>
+
+        </div>
+      </div>
+
+    </div><!-- /panel-scroll -->
+
+    <div class="panel-footer">
+      <button class="btn-build" id="build-btn" onclick="startBuild()" disabled>
+        Construir red →
+      </button>
+    </div>
+  </div><!-- /panel -->
+
+  <!-- ── RIGHT: log & output ── -->
+  <div class="main">
+
+    <div class="log-header">
+      <h2>Activity log</h2>
+      <button id="clear-btn" onclick="clearLog()">clear</button>
+    </div>
+
+    <div id="progress-wrap">
+      <div id="progress-bar-track"><div id="progress-bar-fill"></div></div>
+      <div id="progress-label"></div>
+    </div>
+
+    <div id="log">
+      <div class="ll dim">Selecciona archivos y pulsa «Construir red».</div>
+    </div>
+
+    <div id="result-box">
+      <div class="result-stats" id="result-stats"></div>
+      <div class="result-actions" id="result-actions"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let allFiles   = { culpem: [], uploads: [] };
+let selectedFiles = new Set();  // file paths
+let running    = false;
+let evtSource  = null;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadFiles();
+
+async function loadFiles() {
+  try {
+    const res = await fetch('/files');
+    allFiles  = await res.json();
+    renderFiles();
+  } catch(e) {
+    log('Error cargando lista de archivos: ' + e, 'warn');
+  }
+}
+
+function renderFiles() {
+  renderFileSection('culpem-files', allFiles.culpem, 'culpem-count', true);
+  renderFileSection('yene-files',   allFiles.yene || [], 'yene-count', false);
+  renderFileSection('upload-files', allFiles.uploads, 'upload-count', false);
+  document.getElementById('no-uploads-note').style.display =
+    allFiles.uploads.length ? 'none' : '';
+  updateBuildBtn();
+}
+
+function renderFileSection(containerId, files, countId, autoSelect) {
+  const cont  = document.getElementById(containerId);
+  const countEl = document.getElementById(countId);
+  countEl.textContent = files.length;
+
+  if (!files.length) {
+    if (containerId === 'culpem-files') {
+      cont.innerHTML = '<div class="empty-note">CulpemCorpus no detectado en carpeta hermana.</div>';
+    } else if (containerId === 'yene-files') {
+      cont.innerHTML = '<div class="empty-note">YeneConservatio sin archivos detectados.</div>';
+    }
+    return;
+  }
+
+  cont.innerHTML = '';
+  files.forEach((f, i) => {
+    // auto-select first CulpemCorpus file
+    if (autoSelect && i === 0) selectedFiles.add(f.path);
+
+    const label = document.createElement('label');
+    label.className = 'file-item' + (selectedFiles.has(f.path) ? ' selected' : '');
+    label.innerHTML = `
+      <input type="checkbox" ${selectedFiles.has(f.path) ? 'checked' : ''}
+             onchange="toggleFile('${esc(f.path)}', this.checked, this.closest('.file-item'))">
+      <div style="min-width:0">
+        <div class="file-name">${f.name}</div>
+        <div class="file-meta">
+          ${typeof f.count === 'number' ? f.count.toLocaleString() + ' art.' : ''}
+          ${f.date_min && f.date_max ? ' &nbsp;·&nbsp; ' + f.date_min.slice(0,10) + ' → ' + f.date_max.slice(0,10) : ''}
+          ${f.sources.length ? ' &nbsp;·&nbsp; ' + f.sources.join(', ') : ''}
+        </div>
+      </div>`;
+    cont.appendChild(label);
+  });
+}
+
+function toggleFile(path, checked, itemEl) {
+  if (checked) selectedFiles.add(path);
+  else         selectedFiles.delete(path);
+  itemEl.classList.toggle('selected', checked);
+  updateBuildBtn();
+}
+
+function updateBuildBtn() {
+  document.getElementById('build-btn').disabled = selectedFiles.size === 0 || running;
+}
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+async function uploadFile(file) {
+  if (!file) return;
+  log(`Subiendo ${file.name}…`);
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res  = await fetch('/upload', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.error) { log('Error: ' + data.error, 'warn'); return; }
+    log(`  ✓ ${data.name} subido (${(data.count||'?').toLocaleString()} art.)`, 'ok');
+    allFiles.uploads.unshift(data);
+    selectedFiles.add(data.path);
+    renderFiles();
+  } catch(e) {
+    log('Error subiendo archivo: ' + e, 'error');
+  }
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadFile(file);
+}
+
+// ── Build ─────────────────────────────────────────────────────────────────────
+function startBuild() {
+  if (running) return;
+  if (!selectedFiles.size) return;
+
+  running = true;
+  updateBuildBtn();
+  document.getElementById('build-btn').textContent = '⏳ Procesando…';
+  document.getElementById('result-box').classList.remove('visible');
+  clearLog();
+  setProgress(false, 0, '');
+
+  const params = new URLSearchParams();
+  selectedFiles.forEach(p => params.append('files', p));
+  params.set('min_doc_freq',     document.getElementById('min_doc_freq').value);
+  params.set('min_jaccard',      document.getElementById('min_jaccard').value);
+  params.set('min_word_len',     document.getElementById('min_word_len').value);
+  params.set('lemmatization',    document.getElementById('use_lemma').checked  ? '1' : '0');
+  params.set('ngrams',           document.getElementById('use_ngrams').checked ? '1' : '0');
+  params.set('phrase_min_count', document.getElementById('phrase_min_count').value);
+  params.set('phrase_threshold', document.getElementById('phrase_threshold').value);
+  params.set('extra_stopwords',  document.getElementById('extra_stopwords').value);
+
+  evtSource = new EventSource('/build?' + params.toString());
+
+  evtSource.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'log') {
+      log(d.msg, d.level || 'info');
+    } else if (d.type === 'progress') {
+      setProgress(true, d.pct, d.msg);
+    } else if (d.type === 'done') {
+      onDone(d);
+    }
+  };
+
+  evtSource.onerror = () => {
+    if (running) { log('Conexión perdida.', 'warn'); resetBtn(); }
+  };
+}
+
+function onDone(d) {
+  evtSource?.close();
+  resetBtn();
+  setProgress(false, 100, '');
+  if (d.error) { log('Error: ' + d.error, 'error'); return; }
+
+  const box = document.getElementById('result-box');
+  document.getElementById('result-stats').innerHTML = `
+    <div class="stat"><div class="stat-val">${d.nodes.toLocaleString()}</div><div class="stat-lbl">Nodos</div></div>
+    <div class="stat"><div class="stat-val">${d.edges.toLocaleString()}</div><div class="stat-lbl">Aristas</div></div>
+    <div class="stat"><div class="stat-val">${d.collocations}</div><div class="stat-lbl">Colocaciones</div></div>`;
+  document.getElementById('result-actions').innerHTML = `
+    <a class="btn-dl primary"   href="/download/${d.gexf}" download>⬇ GEXF (Gephi)</a>
+    <a class="btn-dl secondary" href="/download/${d.meta}" download>⬇ Metadata JSON</a>`;
+  box.classList.add('visible');
+}
+
+function resetBtn() {
+  running = false;
+  document.getElementById('build-btn').textContent = 'Construir red →';
+  updateBuildBtn();
+}
+
+// ── Progress bar ──────────────────────────────────────────────────────────────
+function setProgress(visible, pct, msg) {
+  const wrap = document.getElementById('progress-wrap');
+  wrap.classList.toggle('visible', visible);
+  document.getElementById('progress-bar-fill').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = msg;
+}
+
+// ── Toggle sub-settings ───────────────────────────────────────────────────────
+function toggleSub(id, show) {
+  document.getElementById(id).classList.toggle('hidden', !show);
+}
+
+// ── Log ───────────────────────────────────────────────────────────────────────
+function log(msg, cls = 'info') {
+  const el   = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = 'll ' + cls;
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function esc(s) { return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+</script>
+</body>
+</html>

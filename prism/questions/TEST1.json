@@ -1,0 +1,18 @@
+{
+  "id": "TEST1",
+  "name": "GURPOTEST",
+  "questions": [
+    {
+      "id": "q1",
+      "text": "¿Dice algo bueno sobre Boric?"
+    },
+    {
+      "id": "q2",
+      "text": "¿Dice algo malo sobre Boric?"
+    },
+    {
+      "id": "q3",
+      "text": "¿Trata sobre Boric?"
+    }
+  ]
+}

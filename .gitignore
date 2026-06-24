@@ -1,0 +1,16 @@
+# ── Python ──────────────────────────────────────────────
+__pycache__/
+*.pyc
+.venv/
+.venv/.installed
+
+# ── Runtime data & artifacts (kept local, never committed) ─
+# Vault's SQLite archives can reach gigabytes — they are data, not code.
+*/data/
+*/output/
+*/uploads/
+logs/
+
+# ── Environment / OS ────────────────────────────────────
+.env
+.DS_Store

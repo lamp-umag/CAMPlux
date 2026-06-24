@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAMPlux-Vault</title>
+<style>
+  :root {
+    --bg: #0a0e1a; --surface: #121828; --surface2: #1a2236;
+    --border: #1e2d45; --accent: #2e7fd8; --accent2: #1a5fa8;
+    --text: #c8d8f0; --muted: #5a7099; --ok: #3aaa6e;
+    --warn: #d8a83a; --err: #d84444; --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+  header { padding: 20px 28px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 14px; }
+  /* group tabs */
+  .group-tabs { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 10px 20px 0; flex-shrink: 0; }
+  .group-tab { flex: 1; padding: 6px 4px; text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); background: transparent; border: none; cursor: pointer; transition: background .15s, color .15s; }
+  .group-tab.active { background: var(--accent); color: #fff; }
+  .group-tab:not(:last-child) { border-right: 1px solid var(--border); }
+  .card[data-group] { transition: display 0s; }
+  header h1 { font-size: 20px; font-weight: 700; color: var(--accent); }
+  header p { color: var(--muted); font-size: 12px; }
+
+  .layout { display: grid; grid-template-columns: 1fr 360px; height: calc(100vh - 61px); }
+
+  /* ── cards ── */
+  .cards-pane { padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 13px 15px; transition: border-color .15s; }
+  .card:hover { border-color: var(--accent); }
+  .card.active { border-color: var(--accent); background: var(--surface2); }
+
+  .card-top { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; }
+  .card-name { font-size: 14px; font-weight: 600; }
+  .card-meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .pill { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-variant-numeric: tabular-nums; }
+  .pill.has  { border-color: var(--ok); color: var(--ok); }
+  .pill.none { color: var(--muted); }
+
+  .card-actions { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; flex-shrink: 0; }
+  .btn { padding: 5px 11px; border-radius: 6px; border: none; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: opacity .15s; }
+  .btn:hover { opacity: .82; }
+  .btn:disabled { opacity: .3; cursor: not-allowed; }
+  .btn-update { background: var(--accent); color: #fff; }
+  .btn-full   { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .btn-full:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* coverage bars */
+  .coverage { margin-top: 8px; display: flex; gap: 2px; align-items: flex-end; height: 28px; }
+  .cov-bar { flex: 1; min-width: 4px; border-radius: 2px 2px 0 0; background: var(--border); position: relative; cursor: default; transition: opacity .15s; }
+  .cov-bar.has { background: var(--accent); opacity: .7; }
+  .cov-bar.has:hover { opacity: 1; }
+  .cov-bar .tip { display: none; position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%);
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 4px;
+    padding: 3px 7px; font-size: 10px; white-space: nowrap; z-index: 10; color: var(--text); }
+  .cov-bar:hover .tip { display: block; }
+
+  /* El Pingüino year chips */
+  .year-chips { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border); font-size: 11px; cursor: pointer; background: var(--bg); color: var(--muted); transition: all .15s; }
+  .chip:hover { border-color: var(--accent); color: var(--text); }
+  .chip.has { border-color: var(--accent); color: var(--accent); background: rgba(46,127,216,.08); }
+  .chip:disabled { opacity: .3; cursor: not-allowed; }
+
+  /* history */
+  .history-toggle { font-size: 10px; color: var(--muted); cursor: pointer; margin-top: 6px; display: inline-block; }
+  .history-toggle:hover { color: var(--text); }
+  .history-table { margin-top: 6px; font-size: 10px; width: 100%; border-collapse: collapse; display: none; }
+  .history-table.open { display: table; }
+  .history-table th { color: var(--muted); font-weight: 500; text-align: left; padding: 2px 5px; border-bottom: 1px solid var(--border); }
+  .history-table td { padding: 2px 5px; border-bottom: 1px solid rgba(30,45,69,.5); font-variant-numeric: tabular-nums; }
+  .st-done    { color: var(--ok); }
+  .st-stopped { color: var(--warn); }
+  .st-error   { color: var(--err); }
+  .st-running { color: var(--accent); }
+
+  /* ── right panel ── */
+  .log-pane { border-left: 1px solid var(--border); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+  .log-header { display: flex; align-items: center; justify-content: space-between; }
+  .log-header h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  #clear-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; }
+  #clear-btn:hover { color: var(--text); }
+
+  #log { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 10px 12px; overflow-y: auto; font-family: 'Fira Code','Consolas',monospace; font-size: 11px; line-height: 1.65; }
+  .ll { padding: 1px 0; }
+  .ll.info  { color: var(--text); }
+  .ll.warn  { color: var(--warn); }
+  .ll.error { color: var(--err); }
+  .ll.ok    { color: var(--ok); }
+  .ll.dim   { color: var(--muted); }
+
+  #done-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 13px;
+    background: var(--surface); display: none; flex-direction: column; gap: 3px; font-size: 11px; }
+  #done-box.visible { display: flex; }
+  #done-box strong { color: var(--ok); font-size: 14px; }
+
+  details summary { cursor: pointer; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; list-style: none; }
+  details summary::before { content: '+ '; }
+  details[open] summary::before { content: '− '; }
+  .adv-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .adv-row label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .adv-row input { background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text); padding: 4px 7px; font-size: 11px; width: 65px; outline: none; }
+  .adv-row input:focus { border-color: var(--accent); }
+
+  /* disabled source cards */
+  .card-disabled { opacity: .42; }
+  .card-disabled .btn, .card-disabled .chip { display: none; }
+  .disabled-note { font-size: 10px; color: var(--err); margin-top: 5px; line-height: 1.4; }
+
+  /* loading pulse */
+  #pulse { display: none; align-items: center; gap: 8px; font-size: 11px; color: var(--accent); padding: 6px 10px; background: rgba(46,127,216,.08); border: 1px solid rgba(46,127,216,.2); border-radius: 7px; }
+  #pulse.visible { display: flex; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  .dot:nth-child(2) { animation-delay: .2s; }
+  .dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes pulse { 0%,80%,100% { opacity:.2; transform:scale(.8); } 40% { opacity:1; transform:scale(1); } }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🐋 CAMPlux-Vault</h1>
+  <p>CAMPlux &mdash; archivo local persistente de medios</p>
+</header>
+
+<div class="layout">
+
+  <div style="overflow-y:auto;display:flex;flex-direction:column">
+    <div class="group-tabs">
+      <button class="group-tab active" data-g="magallanes"    onclick="setGroup('magallanes')">Magallanes</button>
+      <button class="group-tab" data-g="nacional"     onclick="setGroup('nacional')">Nacional</button>
+      <button class="group-tab" data-g="regional"     onclick="setGroup('regional')">Regiones</button>
+      <button class="group-tab" data-g="internacional" onclick="setGroup('internacional')">Internacional</button>
+      <button class="group-tab" data-g="all"          onclick="setGroup('all')">Todos</button>
+    </div>
+    <div class="cards-pane" id="cards-pane">
+      <div style="color:var(--muted);font-size:12px;padding:8px 0">Cargando estado de archivos…</div>
+    </div>
+  </div>
+
+  <div class="log-pane">
+    <div class="log-header">
+      <h2>Activity log</h2>
+      <div style="display:flex;gap:8px">
+        <button id="errlog-btn" onclick="toggleErrLog()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px" title="Show recent warnings/errors from log file">⚠ errores</button>
+        <button id="clear-btn" onclick="clearLog()">clear</button>
+      </div>
+    </div>
+    <div id="pulse">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <span id="pulse-label">Archivando…</span>
+    </div>
+    <div id="log"><div class="ll dim">Selecciona una fuente para archivar.</div></div>
+    <div id="done-box"></div>
+    <details>
+      <summary>Advanced</summary>
+      <div class="adv-row">
+        <label>Delay (s)</label>
+        <input type="number" id="delay" value="0.5" min="0.1" max="10" step="0.1">
+      </div>
+    </details>
+  </div>
+
+</div>
+
+<script>
+const SOURCES        = {{ sources|tojson }};
+const NAMES          = {{ names|tojson }};
+const SOURCE_YEARS   = {{ source_years|tojson }};
+const SOURCE_GROUPS  = {{ source_groups|tojson }};
+const DISABLED_SOURCES = {{ disabled_sources|tojson }};
+
+// Build a fast sid→group lookup
+const SID_GROUP = {};
+for (const [g, info] of Object.entries(SOURCE_GROUPS)) {
+  for (const sid of info.sources) SID_GROUP[sid] = g;
+}
+
+let activeGroup = 'magallanes';
+
+let running   = false;
+let evtSource = null;
+let allStatus = {};
+
+// ── load & render ─────────────────────────────────────────────────────────────
+async function loadStatus() {
+  const res = await fetch('/status');
+  allStatus = await res.json();
+  renderCards(allStatus);
+}
+
+function makeDisabledCard(sid, info) {
+  const el = document.createElement('div');
+  el.className = 'card card-disabled';
+  el.dataset.group = info.region || 'nacional';
+  el.innerHTML = `
+    <div class="card-top">
+      <div>
+        <div class="card-name">${info.name}</div>
+        <div class="card-meta"><span class="pill">${info.url}</span></div>
+      </div>
+    </div>
+    <div class="disabled-note">✗ ${info.reason}</div>`;
+  return el;
+}
+
+function setGroup(g) {
+  activeGroup = g;
+  document.querySelectorAll('.group-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.g === g)
+  );
+  document.querySelectorAll('#cards-pane .card[data-group]').forEach(card => {
+    card.style.display = (g === 'all' || card.dataset.group === g) ? '' : 'none';
+  });
+}
+
+function renderCards(statuses) {
+  const pane = document.getElementById('cards-pane');
+  pane.innerHTML = '';
+  for (const sid of SOURCES) {
+    pane.appendChild(makeCard(sid, statuses[sid] || {}));
+  }
+  for (const [sid, info] of Object.entries(DISABLED_SOURCES)) {
+    pane.appendChild(makeDisabledCard(sid, info));
+  }
+  // Apply current group filter to everything
+  pane.querySelectorAll('.card[data-group]').forEach(card => {
+    card.style.display = (activeGroup === 'all' || card.dataset.group === activeGroup) ? '' : 'none';
+  });
+}
+
+function makeCard(sid, s) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.id = `card-${sid}`;
+  el.dataset.group = SID_GROUP[sid] || 'magallanes';
+
+  const hasDb   = s.exists;
+  const count   = hasDb ? s.count.toLocaleString() : '—';
+  const range   = hasDb && s.min_date ? `${s.min_date} → ${s.max_date}` : '';
+  const size    = hasDb ? `${s.size_mb} MB` : '';
+  const since   = s.archive_start ? `desde ${s.archive_start}` : '';
+
+  // Detect gaps: has DB but min_date is later than archive start
+  const archiveStart = s.archive_start || '';
+  const hasGap = hasDb && s.min_date && archiveStart && s.min_date > archiveStart;
+
+  el.innerHTML = `
+    <div class="card-top">
+      <div>
+        <div class="card-name">${NAMES[sid]}</div>
+        <div class="card-meta">
+          <span class="pill ${hasDb?'has':'none'}">${hasDb ? count+' art.' : 'sin DB'}</span>
+          ${range ? `<span class="pill">${range}</span>` : ''}
+          ${size  ? `<span class="pill">${size}</span>` : ''}
+          ${since ? `<span class="pill">${since}</span>` : ''}
+          ${hasGap ? `<span class="pill" style="border-color:var(--warn);color:var(--warn)" title="Faltan datos entre ${archiveStart} y ${s.min_date}">⚠ gap</span>` : ''}
+        </div>
+      </div>
+      <div class="card-actions">
+        <button class="btn btn-update" id="btn-update-${sid}"
+          onclick="startArchive('${sid}','update')"
+          ${running?'disabled':''}>
+          ${hasDb ? '↻ Update' : '↓ Download'}
+        </button>
+        ${hasGap ? `<button class="btn" id="btn-backfill-${sid}"
+          style="border:1px solid var(--warn);color:var(--warn);background:transparent;font-size:11px"
+          onclick="startArchive('${sid}','backfill')" ${running?'disabled':''}>
+          ↙ Backfill ${archiveStart.slice(0,4)}–${s.min_date.slice(0,7)}</button>` : ''}
+        ${hasDb ? `<button class="btn btn-full" id="btn-full-${sid}"
+          onclick="confirmFull('${sid}')" ${running?'disabled':''}>
+          ⟳ Full</button>` : ''}
+      </div>
+    </div>
+
+    ${renderCoverage(sid, s.coverage || {})}
+    ${SOURCE_YEARS[sid] ? renderYearChips(sid, s.coverage || {}) : ''}
+
+    <span class="history-toggle" onclick="toggleHistory('${sid}')">▸ historial</span>
+    <table class="history-table" id="hist-${sid}">
+      <thead><tr>
+        <th>modo</th><th>rango</th><th>insertados</th><th>estado</th><th>inicio</th>
+      </tr></thead>
+      <tbody id="hist-body-${sid}"></tbody>
+    </table>`;
+
+  return el;
+}
+
+function renderCoverage(sid, coverage) {
+  const years = SOURCE_YEARS[sid] || [];
+  if (!years.length) return '';
+  const max = Math.max(...years.map(y => coverage[String(y)] || 0), 1);
+  let html = '<div class="coverage">';
+  for (const y of years) {
+    const yr  = String(y);
+    const n   = coverage[yr] || 0;
+    const h   = n ? Math.max(4, Math.round((n / max) * 28)) : 4;
+    const cls = n ? 'cov-bar has' : 'cov-bar';
+    html += `<div class="${cls}" style="height:${h}px">
+      <span class="tip">${yr}: ${n.toLocaleString()}</span></div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderYearChips(sid, coverage) {
+  const years = SOURCE_YEARS[sid] || [];
+  let html = '<div class="year-chips">';
+  for (const yr of years) {
+    const n   = coverage[String(yr)] || 0;
+    const cls = n ? 'chip has' : 'chip';
+    const tip = n ? `${n.toLocaleString()} art. — click to re-scrape` : 'sin datos — click para descargar';
+    html += `<button class="${cls}" title="${tip}"
+      onclick="scrapeYear('${sid}',${yr})" ${running?'disabled':''}>
+      ${yr}${n ? ' ✓' : ''}</button>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+// ── history ──────────────────────────────────────────────────────────────────
+async function toggleHistory(sid) {
+  const tbl  = document.getElementById(`hist-${sid}`);
+  const body = document.getElementById(`hist-body-${sid}`);
+  const toggle = tbl.previousElementSibling;
+
+  if (tbl.classList.contains('open')) {
+    tbl.classList.remove('open');
+    toggle.textContent = '▸ historial';
+    return;
+  }
+
+  const rows = await fetch(`/history?source=${sid}`).then(r => r.json());
+  body.innerHTML = rows.length ? rows.map(r => {
+    const stCls = `st-${r.status}`;
+    const rangeStr = r.date_from && r.date_to ? `${r.date_from}→${r.date_to}` : '—';
+    const startStr = r.started_at ? r.started_at.slice(0,16).replace('T',' ') : '';
+    return `<tr>
+      <td>${r.mode||'—'}</td>
+      <td style="font-size:9px">${rangeStr}</td>
+      <td>${(r.articles_inserted||0).toLocaleString()}</td>
+      <td class="${stCls}">${r.status}</td>
+      <td>${startStr}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="5" style="color:var(--muted)">sin historial</td></tr>';
+
+  tbl.classList.add('open');
+  toggle.textContent = '▾ historial';
+}
+
+// ── scraping ─────────────────────────────────────────────────────────────────
+function scrapeYear(sid, year) {
+  if (running) return;
+  const today = new Date().getFullYear();
+  const df = `${year}-01-01`;
+  const dt = year === today ? new Date().toISOString().slice(0,10) : `${year}-12-31`;
+  startArchive(sid, 'range', df, dt);
+}
+
+function confirmFull(sid) {
+  const since = allStatus[sid]?.archive_start || '?';
+  if (!confirm(`Full re-scrape de ${NAMES[sid]} desde ${since}.\n\nPara fuentes grandes como Ovejero usa mejor los chips de año — más seguro.\n\n¿Continuar de todas formas?`))
+    return;
+  startArchive(sid, 'full');
+}
+
+function setPulse(on, label) {
+  const el = document.getElementById('pulse');
+  el.classList.toggle('visible', on);
+  if (label) document.getElementById('pulse-label').textContent = label;
+}
+
+function startArchive(sid, mode, dateFrom, dateTo) {
+  if (running) return;
+  running = true;
+  setBtnsDisabled(true);
+
+  const delay = document.getElementById('delay').value || 1.5;
+  clearLog();
+  hideDone();
+
+  let label = `${NAMES[sid]} — ${mode}`;
+  if (mode === 'range') label = `${NAMES[sid]} — ${dateFrom} → ${dateTo}`;
+  log(`🐋 ${label}`, 'info');
+  setPulse(true, `Archivando ${NAMES[sid]}…`);
+
+  document.getElementById(`card-${sid}`)?.classList.add('active');
+
+  let url = `/archive?source=${sid}&mode=${mode}&delay=${delay}`;
+  if (dateFrom) url += `&date_from=${dateFrom}&date_to=${dateTo}`;
+
+  evtSource = new EventSource(url);
+
+  evtSource.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'heartbeat') {
+      setPulse(true, `Archivando ${NAMES[sid]}… (activo)`);
+      setTimeout(() => setPulse(true, `Archivando ${NAMES[sid]}…`), 1500);
+    } else if (d.type === 'log') {
+      log(d.msg, d.level === 'error' ? 'error' : d.level === 'warn' ? 'warn' : 'info');
+    } else if (d.type === 'progress') {
+      const parts = [`${d.saved.toLocaleString()} guardados`];
+      if (d.total) parts.push(`${d.seen.toLocaleString()}/${d.total.toLocaleString()} vistos`);
+      else         parts.push(`${d.seen.toLocaleString()} vistos`);
+      if (d.rate)    parts.push(`${d.rate}/s`);
+      if (d.elapsed) parts.push(`${fmtDur(d.elapsed)} transc.`);
+      if (d.eta)     parts.push(`ETA ${fmtDur(d.eta)}`);
+      setPulse(true, `${NAMES[sid]} — ${d.saved.toLocaleString()} guardados`);
+      log(`  → ${parts.join(' · ')}`, 'dim');
+    } else if (d.type === 'done') {
+      onDone(sid, d);
+    }
+  };
+
+  evtSource.onerror = () => {
+    if (running) { log('Conexión perdida.', 'warn'); reset(sid); }
+  };
+}
+
+function onDone(sid, d) {
+  evtSource?.close();
+  reset(sid);
+  const icon = d.job_status === 'done' ? '✓' : d.job_status === 'stopped' ? '⚠' : '✗';
+  log(`${icon} Listo — ${d.saved.toLocaleString()} nuevos, ${d.total_db.toLocaleString()} total`, 'ok');
+  showDone(d);
+  // Update card coverage live
+  if (allStatus[sid]) {
+    allStatus[sid].coverage = d.coverage;
+    allStatus[sid].count    = d.total_db;
+    allStatus[sid].min_date = d.min_date;
+    allStatus[sid].max_date = d.max_date;
+    allStatus[sid].size_mb  = d.size_mb;
+    allStatus[sid].exists   = true;
+  }
+  loadStatus();
+}
+
+function reset(sid) {
+  running = false;
+  setBtnsDisabled(false);
+  setPulse(false);
+  document.getElementById(`card-${sid}`)?.classList.remove('active');
+}
+
+function setBtnsDisabled(val) {
+  document.querySelectorAll('.btn, .chip').forEach(b => b.disabled = val);
+}
+
+// ── log ───────────────────────────────────────────────────────────────────────
+function log(msg, cls = 'info') {
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = `ll ${cls}`;
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+function hideDone()  { document.getElementById('done-box').classList.remove('visible'); }
+
+function fmtDur(secs) {
+  secs = Math.max(0, Math.round(secs));
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h) return `${h}h${m.toString().padStart(2,'0')}m`;
+  if (m) return `${m}m${s.toString().padStart(2,'0')}s`;
+  return `${s}s`;
+}
+
+function showDone(d) {
+  const box = document.getElementById('done-box');
+  box.innerHTML = `
+    <div><strong>${d.saved.toLocaleString()}</strong> artículos nuevos</div>
+    <div style="color:var(--muted);font-size:10px">
+      Total: ${d.total_db.toLocaleString()} &nbsp;·&nbsp;
+      ${d.min_date} → ${d.max_date} &nbsp;·&nbsp;
+      ${d.size_mb} MB
+    </div>`;
+  box.classList.add('visible');
+}
+
+  async function toggleErrLog() {
+    const btn = document.getElementById('errlog-btn');
+    const logEl = document.getElementById('log');
+    if (btn.dataset.open === '1') {
+      btn.dataset.open = '0';
+      btn.style.color = '';
+      clearLog();
+      log('Selecciona una fuente para archivar.', 'dim');
+      return;
+    }
+    btn.dataset.open = '1';
+    btn.style.color = 'var(--warn)';
+    clearLog();
+    try {
+      const res = await fetch('/logs?n=150');
+      const data = await res.json();
+      if (!data.lines.length) {
+        log('Sin errores registrados. ¡Todo bien! 🐋', 'ok');
+        log(`Archivo: ${data.path}`, 'dim');
+        return;
+      }
+      log(`Últimas entradas (${data.path}):`, 'dim');
+      data.lines.forEach(line => {
+        const l = line.trim();
+        if (!l) return;
+        const cls = l.includes('ERROR') ? 'error' : l.includes('WARNING') ? 'warn' : 'dim';
+        log(l, cls);
+      });
+    } catch(e) {
+      log('No se pudo leer el log: ' + e, 'warn');
+    }
+  }
+
+loadStatus();
+</script>
+</body>
+</html>

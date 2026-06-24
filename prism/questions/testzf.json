@@ -1,0 +1,10 @@
+{
+  "id": "testzf",
+  "name": "pregunta test",
+  "questions": [
+    {
+      "id": "q1",
+      "text": "¿Se presenta una imagen positiva, negativa o neutra sobre la zona franca?"
+    }
+  ]
+}

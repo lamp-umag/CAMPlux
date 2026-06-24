@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAMPlux-Quarry</title>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3a;
+    --accent: #e8733a; --accent2: #c45a2a;
+    --text: #d4d8e8; --muted: #6b7094; --ok: #4caf7d; --warn: #e8b43a; --err: #e05252;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+  header { padding: 20px 32px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 12px; }
+  header h1 { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: .5px; }
+  header p { color: var(--muted); font-size: 12px; }
+  .layout { display: grid; grid-template-columns: 340px 1fr; gap: 0; height: calc(100vh - 65px); }
+  .panel { padding: 20px; border-right: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+  .main  { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+
+  label.block { display: block; margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  input[type=text], input[type=number] {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    color: var(--text); padding: 8px 10px; font-size: 13px; outline: none; transition: border-color .15s;
+  }
+  input:focus { border-color: var(--accent); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* group tabs */
+  .group-tabs { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 10px; }
+  .group-tab { flex: 1; padding: 6px 4px; text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); background: transparent; border: none; cursor: pointer; transition: background .15s, color .15s; }
+  .group-tab.active { background: var(--accent); color: #fff; }
+  .group-tab:not(:last-child) { border-right: 1px solid var(--border); }
+
+  /* source list */
+  .source-grid { display: flex; flex-direction: column; gap: 5px; }
+  .source-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; transition: border-color .15s, background .15s; }
+  .source-item:hover:not(.dis) { border-color: var(--accent); background: rgba(232,115,58,.05); }
+  .source-item input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; margin-top: 2px; }
+  .source-item .sname { font-size: 13px; font-weight: 500; }
+  .source-item .surl  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .dis { opacity: .38; cursor: not-allowed; }
+  .dis input { pointer-events: none; }
+  .dis-note { font-size: 10px; color: var(--err); margin-top: 2px; }
+  .local-badge { font-size: 9px; font-weight: 600; padding: 1px 5px; border-radius: 3px; margin-left: 5px;
+    background: rgba(76,175,125,.15); color: var(--ok); border: 1px solid rgba(76,175,125,.3); vertical-align: middle; }
+  .group-sep { font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); padding: 8px 2px 3px; }
+
+  /* mode / format */
+  .mode-tabs  { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .mode-tab   { flex: 1; padding: 7px; text-align: center; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); background: transparent; border: none; transition: background .15s, color .15s; }
+  .mode-tab.active { background: var(--accent); color: #fff; }
+  .format-row { display: flex; gap: 8px; }
+  .format-btn { flex: 1; padding: 7px; border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: border-color .15s, color .15s; }
+  .format-btn.active { border-color: var(--accent); color: var(--accent); }
+  .field-group { display: flex; flex-direction: column; gap: 4px; }
+  details summary { cursor: pointer; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; list-style: none; }
+  details summary::before { content: '+ '; }
+  details[open] summary::before { content: '− '; }
+  details .detail-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+  .btn-scrape { width: 100%; padding: 11px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 14px; font-weight: 700; cursor: pointer; letter-spacing: .3px; transition: background .15s; }
+  .btn-scrape:hover { background: var(--accent2); }
+  .btn-scrape:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+
+  .log-header { display: flex; align-items: center; justify-content: space-between; }
+  .log-header h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  #clear-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; }
+  #clear-btn:hover { color: var(--text); }
+  #log { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; overflow-y: auto; font-family: 'Fira Code','Consolas',monospace; font-size: 12px; line-height: 1.6; }
+  .log-line { padding: 1px 0; }
+  .log-line.info  { color: var(--text); }
+  .log-line.warn  { color: var(--warn); }
+  .log-line.error { color: var(--err); }
+  .log-line.ok    { color: var(--ok); }
+  .log-line.prog  { color: var(--muted); }
+  #result-box { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; background: var(--surface); display: none; align-items: center; justify-content: space-between; gap: 12px; }
+  #result-box.visible { display: flex; }
+  #result-stats { font-size: 13px; }
+  #result-stats strong { color: var(--ok); font-size: 16px; }
+  .btn-download { padding: 8px 18px; background: var(--ok); color: #fff; border: none; border-radius: var(--radius); font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none; transition: opacity .15s; }
+  .btn-download:hover { opacity: .85; }
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🦊 CAMPlux-Quarry</h1>
+  <p>Chilean media scraper &mdash; academic use</p>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT: controls -->
+  <div class="panel">
+
+    <div>
+      <label class="block">Fuentes</label>
+      <div class="group-tabs">
+        <button class="group-tab" data-g="all"        onclick="setGroup('all')">Todos</button>
+        <button class="group-tab active" data-g="magallanes" onclick="setGroup('magallanes')">Magallanes</button>
+        <button class="group-tab" data-g="nacional"   onclick="setGroup('nacional')">Nacional</button>
+        <button class="group-tab" data-g="regional"   onclick="setGroup('regional')">Regiones</button>
+      </div>
+      <div class="source-grid" id="source-list"></div>
+    </div>
+
+    <div>
+      <label class="block">Modo</label>
+      <div class="mode-tabs">
+        <button class="mode-tab active" data-mode="search" onclick="setMode('search')">Search</button>
+        <button class="mode-tab" data-mode="bulk" onclick="setMode('bulk')">Bulk</button>
+      </div>
+    </div>
+
+    <div id="query-section">
+      <div class="field-group">
+        <label class="block">Query</label>
+        <input type="text" id="query" placeholder="ej. zona franca punta arenas">
+      </div>
+    </div>
+
+    <div>
+      <label class="block">Rango de fechas</label>
+      <div class="row">
+        <div class="field-group">
+          <label class="block" style="margin-bottom:3px">Desde</label>
+          <input type="text" id="date_from" placeholder="YYYY-MM-DD" maxlength="10">
+        </div>
+        <div class="field-group">
+          <label class="block" style="margin-bottom:3px">Hasta</label>
+          <input type="text" id="date_to" placeholder="YYYY-MM-DD" maxlength="10">
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <label class="block">Formato</label>
+      <div class="format-row">
+        <button class="format-btn active" data-fmt="csv"  onclick="setFormat('csv')">CSV</button>
+        <button class="format-btn"        data-fmt="jsonl" onclick="setFormat('jsonl')">JSONL</button>
+      </div>
+    </div>
+
+    <details>
+      <summary>Avanzado</summary>
+      <div class="detail-body">
+        <div class="field-group">
+          <label class="block">Delay entre requests (s)</label>
+          <input type="number" id="delay" value="1.5" min="0.5" max="10" step="0.5">
+        </div>
+        <div class="field-group" style="margin-top:8px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text)">
+            <input type="checkbox" id="use_local" checked style="accent-color:var(--ok);width:13px;height:13px">
+            Usar archivo local (YeneConservatio) si disponible
+          </label>
+          <div id="yene-note" style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.4"></div>
+        </div>
+      </div>
+    </details>
+
+    <button class="btn-scrape" id="scrape-btn" onclick="startScrape()">Iniciar scraping</button>
+
+  </div>
+
+  <!-- RIGHT: output -->
+  <div class="main">
+    <div class="log-header">
+      <h2>Activity log</h2>
+      <button id="clear-btn" onclick="clearLog()">clear</button>
+    </div>
+    <div id="log">
+      <div class="log-line info">Listo. Configura fuentes y fechas, luego haz clic en Iniciar scraping.</div>
+    </div>
+    <div id="result-box">
+      <div id="result-stats"></div>
+      <a id="download-link" class="btn-download" href="#" download>Descargar</a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let currentMode   = 'search';
+let currentFormat = 'csv';
+let currentGroup  = 'magallanes';
+let running       = false;
+let evtSource     = null;
+let yeneStatus    = {};
+let META          = {};   // sid → {name,url,region,enabled,note}
+let GROUPS        = {};   // gid → {label,sources:[]}
+
+async function init() {
+  try {
+    const r = await fetch('/source_groups');
+    const d = await r.json();
+    META   = d.sources;
+    GROUPS = d.groups;
+  } catch (_) {}
+  renderSources('magallanes');
+  loadYeneStatus();
+}
+
+// ── group switching ───────────────────────────────────────────────────────────
+
+function setGroup(g) {
+  currentGroup = g;
+  document.querySelectorAll('.group-tab').forEach(b => b.classList.toggle('active', b.dataset.g === g));
+  renderSources(g);
+}
+
+function renderSources(g) {
+  const list = document.getElementById('source-list');
+  list.innerHTML = '';
+
+  const ids = g === 'all'
+    ? Object.values(GROUPS).flatMap(grp => grp.sources)
+    : (GROUPS[g]?.sources || []);
+
+  let lastRegion = null;
+
+  ids.forEach(sid => {
+    const s = META[sid];
+    if (!s) return;
+
+    // Divider when showing all groups
+    if (g === 'all' && s.region !== lastRegion) {
+      lastRegion = s.region;
+      const sep = document.createElement('div');
+      sep.className = 'group-sep';
+      sep.textContent = GROUPS[s.region]?.label || s.region;
+      list.appendChild(sep);
+    }
+
+    const checked = s.enabled && s.region === 'magallanes';
+
+    const item = document.createElement('label');
+    item.className = 'source-item' + (s.enabled ? '' : ' dis');
+    item.dataset.sid = sid;
+
+    item.innerHTML = `
+      <input type="checkbox" name="sources" value="${sid}"
+        ${checked ? 'checked' : ''} ${s.enabled ? '' : 'disabled'}>
+      <div style="min-width:0;overflow:hidden">
+        <div class="sname">${s.name}</div>
+        <div class="surl">${s.url}${s.enabled ? ' &mdash; WP API' : ''}</div>
+        ${!s.enabled ? `<div class="dis-note">✗ ${s.note}</div>` : ''}
+      </div>`;
+    list.appendChild(item);
+  });
+
+  applyYeneBadges();
+}
+
+// ── Yene local status ─────────────────────────────────────────────────────────
+
+async function loadYeneStatus() {
+  try {
+    const r = await fetch('/yene_status');
+    if (!r.ok) return;
+    yeneStatus = await r.json();
+    applyYeneBadges();
+    updateYeneNote();
+  } catch (_) {}
+}
+
+function applyYeneBadges() {
+  document.querySelectorAll('input[name=sources]').forEach(cb => {
+    const sid    = cb.value;
+    const cov    = yeneStatus[sid];
+    const nameEl = cb.closest('.source-item')?.querySelector('.sname');
+    if (!nameEl) return;
+    nameEl.querySelector('.local-badge')?.remove();
+    if (cov) {
+      const badge = document.createElement('span');
+      badge.className = 'local-badge';
+      badge.title = `Local: ${cov.min} → ${cov.max}  (${cov.count.toLocaleString()} art.)`;
+      badge.textContent = '🐋 local';
+      nameEl.appendChild(badge);
+    }
+  });
+}
+
+function updateYeneNote() {
+  const useLocal = document.getElementById('use_local').checked;
+  const note = document.getElementById('yene-note');
+  if (!useLocal) { note.textContent = 'Scraping online para todas las fuentes.'; return; }
+  const withLocal = Object.entries(yeneStatus).filter(([,v]) => v).map(([k]) => k);
+  note.textContent = withLocal.length
+    ? `Archivo local disponible para: ${withLocal.join(', ')}.`
+    : 'Sin archivo local — YeneConservatio no detectado.';
+}
+document.getElementById('use_local')?.addEventListener('change', updateYeneNote);
+
+// ── mode / format ─────────────────────────────────────────────────────────────
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  const qs = document.getElementById('query-section');
+  qs.style.opacity = mode === 'search' ? '1' : '0.35';
+  qs.style.pointerEvents = mode === 'search' ? '' : 'none';
+}
+
+function setFormat(fmt) {
+  currentFormat = fmt;
+  document.querySelectorAll('.format-btn').forEach(b => b.classList.toggle('active', b.dataset.fmt === fmt));
+}
+
+// ── scraping ──────────────────────────────────────────────────────────────────
+
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+function log(msg, cls='info') {
+  const el = document.getElementById('log');
+  const ln = document.createElement('div');
+  ln.className = 'log-line ' + cls;
+  ln.textContent = msg;
+  el.appendChild(ln);
+  el.scrollTop = el.scrollHeight;
+}
+
+function startScrape() {
+  if (running) { stopScrape(); return; }
+  const sources = [...document.querySelectorAll('input[name=sources]:checked')].map(c => c.value);
+  if (!sources.length) { log('Selecciona al menos una fuente.', 'error'); return; }
+  const query = document.getElementById('query').value.trim();
+  if (currentMode === 'search' && !query) { log('Ingresa una query (o cambia a modo Bulk).', 'warn'); return; }
+
+  const p = new URLSearchParams();
+  sources.forEach(s => p.append('sources', s));
+  if (currentMode === 'search' && query) p.set('query', query);
+  p.set('date_from', document.getElementById('date_from').value);
+  p.set('date_to',   document.getElementById('date_to').value);
+  p.set('format',    currentFormat);
+  p.set('delay',     document.getElementById('delay').value);
+  p.set('use_local', document.getElementById('use_local').checked ? '1' : '0');
+
+  clearLog();
+  document.getElementById('result-box').classList.remove('visible');
+  document.getElementById('scrape-btn').textContent = '⏹ Detener';
+  running = true;
+
+  log(`Iniciando — ${sources.join(', ')} | ${currentMode}${query ? ' | '+query : ''}`);
+
+  evtSource = new EventSource('/scrape?' + p.toString());
+  evtSource.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if      (d.type === 'log')      log(d.msg, d.level === 'error' ? 'error' : d.level === 'warn' ? 'warn' : 'info');
+    else if (d.type === 'progress') log(`  [${d.total}] ${d.title}`, 'prog');
+    else if (d.type === 'done')     done(d);
+  };
+  evtSource.onerror = () => { if (running) { log('Conexión perdida.', 'warn'); resetBtn(); } };
+}
+
+function done(data) {
+  evtSource?.close(); resetBtn();
+  if (data.count > 0) {
+    log(`Listo — ${data.count} artículos${data.fails ? ', '+data.fails+' fallidos' : ''}.`, 'ok');
+    document.getElementById('result-stats').innerHTML =
+      `<strong>${data.count}</strong> artículos &mdash; ${data.file}`;
+    const lnk = document.getElementById('download-link');
+    lnk.href = '/download/' + data.file; lnk.download = data.file;
+    document.getElementById('result-box').classList.add('visible');
+  } else {
+    log('Sin artículos. Revisa rango de fechas o query.', 'warn');
+  }
+}
+
+function stopScrape() { evtSource?.close(); resetBtn(); log('Detenido por el usuario.', 'warn'); }
+function resetBtn()   { running = false; document.getElementById('scrape-btn').textContent = 'Iniciar scraping'; }
+
+init();
+</script>
+</body>
+</html>
