@@ -1,0 +1,13 @@
+[Unit]
+Description=Run CAMPlux Vault's incremental archive update nightly
+
+[Timer]
+# Local time, not UTC -- systemd resolves OnCalendar against the system
+# timezone. Some slack (RandomizedDelaySec) so it doesn't always hit every
+# site at the exact same second as any other cron-like job on this box.
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

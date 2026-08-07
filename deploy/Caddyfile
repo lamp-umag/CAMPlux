@@ -1,0 +1,26 @@
+{
+	admin off
+}
+
+# Two separate sites/ports, NOT one site with path-based routing to two
+# backends: vault/quarry's own frontend JS calls absolute paths like
+# fetch('/status'), fetch('/scrape?...') -- if this were mounted under e.g.
+# /vault/* with the prefix stripped before reaching the backend, those
+# in-page fetch calls would still hit plain /status at the site root (not
+# /vault/status) and miss the backend entirely. Separate ports sidestep the
+# problem completely: each app is still served from its own root, exactly
+# as it expects.
+
+:5081 {
+	basic_auth {
+		{$CAMPLUX_AUTH_USER} {$CAMPLUX_AUTH_HASH}
+	}
+	reverse_proxy vault:5001
+}
+
+:5082 {
+	basic_auth {
+		{$CAMPLUX_AUTH_USER} {$CAMPLUX_AUTH_HASH}
+	}
+	reverse_proxy quarry:5002
+}

@@ -2,3 +2,4 @@ flask
 pandas
 spacy
 gensim
+waitress>=3.0

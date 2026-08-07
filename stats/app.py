@@ -15,6 +15,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
+from waitress import serve
 
 import yene_io
 
@@ -315,4 +316,7 @@ def analyse():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5006, threaded=True)
+    # waitress, not Flask's dev server: debug=True exposes an interactive
+    # Python console on unhandled exceptions -- fine on localhost-only, a
+    # real problem once this is reachable beyond localhost.
+    serve(app, host="0.0.0.0", port=5006, threads=4)

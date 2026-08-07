@@ -1,0 +1,120 @@
+# Production-ish deployment for a shared host (e.g. lamp-compute-01), as
+# opposed to the single-machine `python run.py` / Beacon flow in the README,
+# which is meant for interactive local use.
+#
+#   docker compose up -d              # starts vault + quarry only
+#   docker compose --profile batch up -d cleaner   # start one on-demand module
+#   docker compose --profile batch down             # stop it again
+#
+# Vault is the archive builder (persists into vault/data/*.db, meant to run
+# continuously + on a schedule -- see deploy/nightly-archive.sh). Quarry is
+# an on-demand export/query tool that reads Vault's archive as a cache via a
+# shared volume (same relative-path lookup it already does outside Docker,
+# see quarry/Dockerfile). Neither needs a public port here -- deploy/Caddyfile
+# is what actually gets exposed; see deploy/README.md.
+#
+# Prism isn't included -- it needs a local Ollama LLM server, out of scope
+# for this deployment target.
+
+services:
+  vault:
+    build: ./vault
+    restart: unless-stopped
+    mem_limit: 512m
+    volumes:
+      - vault_data:/camplux/vault/data
+    expose:
+      - "5001"
+    ports:
+      # Loopback-only, bypasses Caddy/Basic Auth entirely -- for host-local
+      # automation (deploy/nightly_archive.py) to call directly, same trust
+      # model as any other localhost-bound service on this box. Not
+      # reachable from outside the machine; the public/authenticated path
+      # is still only through Caddy (see deploy/Caddyfile).
+      - "127.0.0.1:5001:5001"
+
+  quarry:
+    build: ./quarry
+    restart: unless-stopped
+    mem_limit: 512m
+    volumes:
+      # NOT :ro -- Vault's DBs are WAL-mode SQLite, which needs to create
+      # -wal/-shm sidecar files even for a read-only connection attempt; a
+      # Docker-level read-only mount blocks that with "unable to open
+      # database file". The read-only guarantee is already enforced at the
+      # SQL level instead (see local_db.py / yene_io.py: `PRAGMA
+      # query_only = ON`), which doesn't hit this problem.
+      - vault_data:/camplux/vault/data
+      - quarry_output:/camplux/quarry/output
+    expose:
+      - "5002"
+    depends_on:
+      - vault
+
+  cleaner:
+    build: ./cleaner
+    profiles: ["batch"]
+    mem_limit: 512m
+    volumes:
+      # NOT :ro -- Vault's DBs are WAL-mode SQLite, which needs to create
+      # -wal/-shm sidecar files even for a read-only connection attempt; a
+      # Docker-level read-only mount blocks that with "unable to open
+      # database file". The read-only guarantee is already enforced at the
+      # SQL level instead (see local_db.py / yene_io.py: `PRAGMA
+      # query_only = ON`), which doesn't hit this problem.
+      - vault_data:/camplux/vault/data
+      - quarry_output:/camplux/quarry/output
+    expose:
+      - "5003"
+
+  weaver:
+    build: ./weaver
+    profiles: ["batch"]
+    mem_limit: 1g
+    volumes:
+      # NOT :ro -- Vault's DBs are WAL-mode SQLite, which needs to create
+      # -wal/-shm sidecar files even for a read-only connection attempt; a
+      # Docker-level read-only mount blocks that with "unable to open
+      # database file". The read-only guarantee is already enforced at the
+      # SQL level instead (see local_db.py / yene_io.py: `PRAGMA
+      # query_only = ON`), which doesn't hit this problem.
+      - vault_data:/camplux/vault/data
+      - weaver_output:/camplux/weaver/output
+    expose:
+      - "5005"
+
+  stats:
+    build: ./stats
+    profiles: ["batch"]
+    mem_limit: 512m
+    volumes:
+      # NOT :ro -- Vault's DBs are WAL-mode SQLite, which needs to create
+      # -wal/-shm sidecar files even for a read-only connection attempt; a
+      # Docker-level read-only mount blocks that with "unable to open
+      # database file". The read-only guarantee is already enforced at the
+      # SQL level instead (see local_db.py / yene_io.py: `PRAGMA
+      # query_only = ON`), which doesn't hit this problem.
+      - vault_data:/camplux/vault/data
+    expose:
+      - "5006"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:5081:5081"
+      - "127.0.0.1:5082:5082"
+    depends_on:
+      - vault
+      - quarry
+
+volumes:
+  vault_data:
+  quarry_output:
+  weaver_output:
+  caddy_data:

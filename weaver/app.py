@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 from flask import Flask, Response, jsonify, render_template, request, send_file
 from flask import stream_with_context
+from waitress import serve
 
 import network
 import yene_io
@@ -167,4 +168,7 @@ def _file_info(path: Path) -> dict:
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5005, threaded=True)
+    # waitress, not Flask's dev server: debug=True exposes an interactive
+    # Python console on unhandled exceptions -- fine on localhost-only, a
+    # real problem once this is reachable beyond localhost.
+    serve(app, host="0.0.0.0", port=5005, threads=4)
