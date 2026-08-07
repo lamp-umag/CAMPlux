@@ -170,6 +170,15 @@
       <div id="scheduled-list" style="display:flex;flex-direction:column;gap:6px;padding:6px 0"></div>
     </details>
     <details>
+      <summary>Recientes (programados)</summary>
+      <div id="scheduled-recent-list" style="display:flex;flex-direction:column;gap:6px;padding:6px 0"></div>
+    </details>
+    <details open>
+      <summary>Actualización automática nocturna</summary>
+      <div style="font-size:11px;color:var(--muted);padding:4px 0">Corre sola cada noche, ~03:00–03:10 (systemd timer en el host, no depende de esta página ni de ninguna pestaña abierta).</div>
+      <div id="nightly-runs-list" style="display:flex;flex-direction:column;gap:6px;padding:6px 0"></div>
+    </details>
+    <details>
       <summary>Advanced</summary>
       <div class="adv-row">
         <label>Delay (s)</label>
@@ -240,17 +249,42 @@ async function cancelScheduled(runId) {
 
 function renderScheduledPanel() {
   const box = document.getElementById('scheduled-list');
-  if (!box) return;
-  const pending = scheduleState.pending || [];
-  if (!pending.length) {
-    box.innerHTML = '<div style="color:var(--muted);font-size:12px">Nada agendado.</div>';
-    return;
+  if (box) {
+    const pending = scheduleState.pending || [];
+    box.innerHTML = pending.length ? pending.map(r => `
+      <div class="sched-row">
+        <span>${NAMES[r.source_id] || r.source_id} — ${r.mode} — ${r.run_at}</span>
+        <button class="btn" style="font-size:11px" onclick="cancelScheduled(${r.id})">✕</button>
+      </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px">Nada agendado.</div>';
   }
-  box.innerHTML = pending.map(r => `
-    <div class="sched-row">
-      <span>${NAMES[r.source_id] || r.source_id} — ${r.mode} — ${r.run_at}</span>
-      <button class="btn" style="font-size:11px" onclick="cancelScheduled(${r.id})">✕</button>
-    </div>`).join('');
+
+  const recentBox = document.getElementById('scheduled-recent-list');
+  if (recentBox) {
+    const recent = scheduleState.recent || [];
+    recentBox.innerHTML = recent.length ? recent.map(r => `
+      <div class="sched-row">
+        <span>${statusIcon(r.status)} ${NAMES[r.source_id] || r.source_id} — ${r.mode} — ${r.run_at}
+          ${r.result_note ? `<br><span style="color:var(--muted)">${r.result_note}</span>` : ''}</span>
+      </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px">Sin ejecuciones programadas todavía.</div>';
+  }
+
+  const nightlyBox = document.getElementById('nightly-runs-list');
+  if (nightlyBox) {
+    const runs = scheduleState.nightly_runs || [];
+    nightlyBox.innerHTML = runs.length ? runs.map(r => `
+      <div class="sched-row" style="flex-direction:column;align-items:flex-start">
+        <span>${r.started_at.replace('T', ' ').slice(0, 16)}
+          — ✓ ${r.updated_count} · ✕ ${r.failed_count}
+          · sin dato ${r.skipped_no_data_count} · apagado ${r.skipped_disabled_count}</span>
+      </div>`).join('')
+      : '<div style="color:var(--muted);font-size:12px">Todavía no ha corrido ninguna vez.</div>';
+  }
+}
+
+function statusIcon(status) {
+  return { done: '✓', error: '✕', cancelled: '⊘' }[status] || '·';
 }
 
 // ── load & render ─────────────────────────────────────────────────────────────

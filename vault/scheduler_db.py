@@ -5,14 +5,19 @@ Separate from db.py's per-source article DBs (data/yene_{source}.db) --
 this is control/meta state, not archive data, so it lives in its own file:
 data/_scheduler.db.
 
-Two concerns:
+Three concerns:
   - nightly_enabled: per-source on/off switch for the recurring nightly
     update pass (deploy/nightly_archive.py checks this before running).
   - scheduled_runs: one-off future runs ("scrape X at this date/time"),
     picked up and executed by deploy/scheduler_tick.py.
+  - nightly_runs: a record of each nightly pass actually happening (or not)
+    -- "what's supposed to happen when, and did it" is the whole point of
+    a scheduling dashboard; a schedule nobody can see the outcome of isn't
+    actually answering that.
 """
 import sqlite3
 import datetime
+import json
 import os
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
@@ -48,6 +53,16 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_scheduled_runs_status
             ON scheduled_runs(status, run_at);
+        CREATE TABLE IF NOT EXISTS nightly_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at TEXT NOT NULL,
+            finished_at TEXT NOT NULL,
+            updated_count INTEGER NOT NULL,
+            failed_count INTEGER NOT NULL,
+            skipped_no_data_count INTEGER NOT NULL,
+            skipped_disabled_count INTEGER NOT NULL,
+            detail_json TEXT
+        );
     """)
     con.commit()
     con.close()
@@ -150,3 +165,37 @@ def cancel_scheduled_run(run_id):
     changed = cur.rowcount > 0
     con.close()
     return changed
+
+
+# ── nightly run history (the "did it actually happen" record) ──────────────
+
+def log_nightly_run(started_at, finished_at, updated, failed, skipped_no_data,
+                     skipped_disabled, detail):
+    con = _connect()
+    con.execute(
+        """INSERT INTO nightly_runs
+           (started_at, finished_at, updated_count, failed_count,
+            skipped_no_data_count, skipped_disabled_count, detail_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (started_at, finished_at, updated, failed, skipped_no_data,
+         skipped_disabled, json.dumps(detail, ensure_ascii=False)),
+    )
+    con.commit()
+    con.close()
+
+
+def list_nightly_runs(limit=14):
+    con = _connect()
+    rows = con.execute(
+        "SELECT * FROM nightly_runs ORDER BY started_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    con.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["detail"] = json.loads(d.pop("detail_json") or "{}")
+        except json.JSONDecodeError:
+            d["detail"] = {}
+        out.append(d)
+    return out

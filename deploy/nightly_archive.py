@@ -43,6 +43,14 @@ def get_json(url, timeout=30):
         return json.loads(r.read().decode("utf-8"))
 
 
+def post_json(url, body, timeout=30):
+    data = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST",
+                                  headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
 def run_update(source_id):
     """Blocks until Vault's SSE stream for this source finishes; returns the
     final 'done' event's dict, or None if the stream ended without one."""
@@ -85,6 +93,7 @@ def main():
               f"in the dashboard: {', '.join(disabled)}")
 
     ok, failed = [], []
+    detail = {}
     for source_id in to_update:
         print(f"--- updating {source_id} ---")
         try:
@@ -92,20 +101,40 @@ def main():
         except Exception as e:
             print(f"  ERROR: {e}")
             failed.append(source_id)
+            detail[source_id] = {"status": "error", "note": str(e)}
             continue
 
         if result is None:
             print("  WARNING: stream ended with no 'done' event")
             failed.append(source_id)
+            detail[source_id] = {"status": "error", "note": "no 'done' event"}
             continue
 
         print(f"  saved={result.get('saved')} seen={result.get('seen')} "
               f"total_db={result.get('total_db')} "
               f"range={result.get('min_date')}..{result.get('max_date')}")
         ok.append(source_id)
+        detail[source_id] = {
+            "status": "done", "saved": result.get("saved"), "seen": result.get("seen"),
+            "total_db": result.get("total_db"),
+        }
 
+    finished = datetime.datetime.now(datetime.UTC).isoformat()
     print(f"=== done: {len(ok)} updated, {len(failed)} failed, "
           f"{len(no_data)} skipped (no archive), {len(disabled)} skipped (disabled) ===")
+
+    try:
+        post_json(f"{VAULT_BASE}/schedule/nightly_run", {
+            "started_at": started, "finished_at": finished,
+            "updated": len(ok), "failed": len(failed),
+            "skipped_no_data": len(no_data), "skipped_disabled": len(disabled),
+            "detail": detail,
+        })
+    except Exception as e:
+        # Don't fail the whole run over a logging call -- the actual scrapes
+        # already happened and are safe in each source's own DB either way.
+        print(f"WARNING: failed to record run summary in dashboard: {e}")
+
     if failed:
         print(f"Failed: {', '.join(failed)}")
         sys.exit(1)

@@ -276,7 +276,26 @@ def schedule_state():
         "nightly_enabled": scheduler_db.all_nightly_states(SOURCES),
         "pending": [r for r in scheduler_db.list_scheduled_runs() if r["status"] == "pending"],
         "recent": [r for r in scheduler_db.list_scheduled_runs(limit=20) if r["status"] != "pending"],
+        "nightly_runs": scheduler_db.list_nightly_runs(),
     })
+
+
+@app.route("/schedule/nightly_run", methods=["POST"])
+def schedule_nightly_run_log():
+    """Used by deploy/nightly_archive.py to record that a nightly pass
+    actually happened (or didn't) -- "what's supposed to run when, and did
+    it" is the point of the dashboard; a schedule with no visible outcome
+    doesn't answer that."""
+    body = request.get_json(force=True, silent=True) or {}
+    required = ("started_at", "finished_at", "updated", "failed",
+                "skipped_no_data", "skipped_disabled", "detail")
+    if not all(k in body for k in required):
+        return jsonify({"error": f"body must include {required}"}), 400
+    scheduler_db.log_nightly_run(
+        body["started_at"], body["finished_at"], body["updated"], body["failed"],
+        body["skipped_no_data"], body["skipped_disabled"], body["detail"],
+    )
+    return jsonify({"ok": True})
 
 
 @app.route("/schedule/toggle", methods=["POST"])
