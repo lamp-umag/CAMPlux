@@ -41,6 +41,10 @@
   .pill.none { color: var(--muted); }
 
   .card-actions { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; flex-shrink: 0; }
+  .nightly-toggle { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); cursor: pointer; }
+  .schedule-form { display: flex; gap: 6px; align-items: center; padding: 8px 0; flex-wrap: wrap; }
+  .schedule-form input, .schedule-form select { background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-size: 12px; }
+  .sched-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; background: var(--surface2); border-radius: 6px; padding: 4px 8px; }
   .btn { padding: 5px 11px; border-radius: 6px; border: none; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: opacity .15s; }
   .btn:hover { opacity: .82; }
   .btn:disabled { opacity: .3; cursor: not-allowed; }
@@ -161,6 +165,10 @@
     </div>
     <div id="log"><div class="ll dim">Selecciona una fuente para archivar.</div></div>
     <div id="done-box"></div>
+    <details open>
+      <summary>Programados</summary>
+      <div id="scheduled-list" style="display:flex;flex-direction:column;gap:6px;padding:6px 0"></div>
+    </details>
     <details>
       <summary>Advanced</summary>
       <div class="adv-row">
@@ -190,6 +198,60 @@ let activeGroup = 'magallanes';
 let running   = false;
 let evtSource = null;
 let allStatus = {};
+let scheduleState = { nightly_enabled: {}, pending: [], recent: [] };
+
+async function loadScheduleState() {
+  const res = await fetch('/schedule/state');
+  scheduleState = await res.json();
+  renderScheduledPanel();
+}
+
+function nightlyOn(sid) {
+  return scheduleState.nightly_enabled[sid] !== false;
+}
+
+async function toggleNightly(sid, checked) {
+  await fetch(`/schedule/toggle?source=${sid}&enabled=${checked ? 1 : 0}`, { method: 'POST' });
+  scheduleState.nightly_enabled[sid] = checked;
+}
+
+function toggleScheduleForm(sid) {
+  const el = document.getElementById(`sched-form-${sid}`);
+  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+}
+
+async function submitSchedule(sid) {
+  const when = document.getElementById(`sched-when-${sid}`).value;
+  const mode = document.getElementById(`sched-mode-${sid}`).value;
+  if (!when) { alert('Elige fecha y hora'); return; }
+  const res = await fetch(
+    `/schedule/once?source=${sid}&mode=${mode}&run_at=${encodeURIComponent(when)}`,
+    { method: 'POST' }
+  );
+  if (!res.ok) { alert('Error al agendar: ' + (await res.text())); return; }
+  toggleScheduleForm(sid);
+  loadScheduleState();
+}
+
+async function cancelScheduled(runId) {
+  await fetch(`/schedule/cancel/${runId}`, { method: 'POST' });
+  loadScheduleState();
+}
+
+function renderScheduledPanel() {
+  const box = document.getElementById('scheduled-list');
+  if (!box) return;
+  const pending = scheduleState.pending || [];
+  if (!pending.length) {
+    box.innerHTML = '<div style="color:var(--muted);font-size:12px">Nada agendado.</div>';
+    return;
+  }
+  box.innerHTML = pending.map(r => `
+    <div class="sched-row">
+      <span>${NAMES[r.source_id] || r.source_id} — ${r.mode} — ${r.run_at}</span>
+      <button class="btn" style="font-size:11px" onclick="cancelScheduled(${r.id})">✕</button>
+    </div>`).join('');
+}
 
 // ── load & render ─────────────────────────────────────────────────────────────
 async function loadStatus() {
@@ -279,7 +341,23 @@ function makeCard(sid, s) {
         ${hasDb ? `<button class="btn btn-full" id="btn-full-${sid}"
           onclick="confirmFull('${sid}')" ${running?'disabled':''}>
           ⟳ Full</button>` : ''}
+        <label class="nightly-toggle" title="Incluir en la actualización automática nocturna">
+          <input type="checkbox" ${nightlyOn(sid) ? 'checked' : ''}
+            onchange="toggleNightly('${sid}', this.checked)">
+          🌙
+        </label>
+        <button class="btn" style="font-size:11px" onclick="toggleScheduleForm('${sid}')">📅 Programar</button>
       </div>
+    </div>
+
+    <div class="schedule-form" id="sched-form-${sid}" style="display:none">
+      <input type="datetime-local" id="sched-when-${sid}">
+      <select id="sched-mode-${sid}">
+        <option value="update">update</option>
+        <option value="full">full</option>
+        <option value="backfill">backfill</option>
+      </select>
+      <button class="btn" style="font-size:11px" onclick="submitSchedule('${sid}')">Agendar</button>
     </div>
 
     ${renderCoverage(sid, s.coverage || {})}
@@ -524,6 +602,8 @@ function showDone(d) {
   }
 
 loadStatus();
+loadScheduleState();
+setInterval(loadScheduleState, 30000);
 </script>
 </body>
 </html>

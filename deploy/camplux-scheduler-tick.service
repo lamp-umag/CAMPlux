@@ -1,0 +1,10 @@
+[Unit]
+Description=CAMPlux Vault: run any due one-off scheduled archive jobs
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/mnx/CAMPlux
+ExecStart=/usr/bin/python3 /home/mnx/CAMPlux/deploy/scheduler_tick.py
+User=mnx

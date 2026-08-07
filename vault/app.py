@@ -9,7 +9,10 @@ from flask import stream_with_context
 from waitress import serve
 
 import db
+import scheduler_db
 from scrapers import get_scraper
+
+scheduler_db.init_db()
 
 # ── logging setup ─────────────────────────────────────────────────────────────
 _LOG_DIR = os.path.join(os.path.dirname(__file__), "data", "logs")
@@ -259,6 +262,78 @@ def status():
     if source_id:
         return jsonify(db.get_status(source_id))
     return jsonify({s: db.get_status(s) for s in SOURCES})
+
+
+# ── scheduling: nightly on/off + one-off future runs ────────────────────────
+# Separate from /archive (which runs a job immediately) -- these just record
+# intent. deploy/nightly_archive.py checks nightly_enabled before running a
+# source; deploy/scheduler_tick.py (runs every ~10min) picks up due one-off
+# runs and actually calls /archive for them.
+
+@app.route("/schedule/state")
+def schedule_state():
+    return jsonify({
+        "nightly_enabled": scheduler_db.all_nightly_states(SOURCES),
+        "pending": [r for r in scheduler_db.list_scheduled_runs() if r["status"] == "pending"],
+        "recent": [r for r in scheduler_db.list_scheduled_runs(limit=20) if r["status"] != "pending"],
+    })
+
+
+@app.route("/schedule/toggle", methods=["POST"])
+def schedule_toggle():
+    source_id = request.args.get("source")
+    enabled = request.args.get("enabled", "1") == "1"
+    if not source_id or source_id not in SOURCES:
+        return jsonify({"error": "Unknown source"}), 400
+    scheduler_db.set_nightly_enabled(source_id, enabled)
+    return jsonify({"source": source_id, "nightly_enabled": enabled})
+
+
+@app.route("/schedule/once", methods=["POST"])
+def schedule_once():
+    source_id = request.args.get("source")
+    mode = request.args.get("mode", "update")
+    run_at = request.args.get("run_at")  # ISO 8601, e.g. from <input type=datetime-local>
+    date_from = request.args.get("date_from") or None
+    date_to = request.args.get("date_to") or None
+
+    if not source_id or source_id not in SOURCES:
+        return jsonify({"error": "Unknown source"}), 400
+    if not run_at:
+        return jsonify({"error": "run_at required (ISO datetime)"}), 400
+    try:
+        # Accept a bare "YYYY-MM-DDTHH:MM" from datetime-local inputs (no
+        # timezone) by treating it as local server time -- consistent with
+        # how the nightly timer's own OnCalendar is interpreted.
+        datetime.datetime.fromisoformat(run_at)
+    except ValueError:
+        return jsonify({"error": "run_at must be ISO 8601"}), 400
+
+    new_id = scheduler_db.add_scheduled_run(source_id, mode, run_at, date_from, date_to)
+    return jsonify({"id": new_id, "source": source_id, "mode": mode, "run_at": run_at})
+
+
+@app.route("/schedule/cancel/<int:run_id>", methods=["POST"])
+def schedule_cancel(run_id):
+    ok = scheduler_db.cancel_scheduled_run(run_id)
+    if not ok:
+        return jsonify({"error": "Not found or not pending"}), 404
+    return jsonify({"id": run_id, "cancelled": True})
+
+
+@app.route("/schedule/mark/<int:run_id>", methods=["POST"])
+def schedule_mark(run_id):
+    """Used by deploy/scheduler_tick.py to record the outcome of a scheduled
+    run it just executed -- a real endpoint rather than having that
+    host-side script reach into the DB file directly, which would silently
+    miss (Vault's actual data lives in a Docker volume, not a host path the
+    script could import its way into)."""
+    status = request.args.get("status")
+    note = request.args.get("note")
+    if status not in ("done", "error"):
+        return jsonify({"error": "status must be done or error"}), 400
+    scheduler_db.mark_scheduled_run(run_id, status, note)
+    return jsonify({"id": run_id, "status": status})
 
 
 @app.route("/logs")

@@ -24,6 +24,9 @@ one-time backfill yourself, deliberately, e.g.:
 one at a time, when you're ready to (a) actually wait for it and (b) not
 do all 18 at once. After that first run, this nightly job picks it up
 automatically like any other source.
+
+Also respects the per-source "nightly" toggle in the dashboard
+(vault/schedule/state) -- a source with data but toggled off is skipped too.
 """
 import datetime
 import json
@@ -64,12 +67,22 @@ def main():
     print(f"=== nightly_archive.py starting {started} ===")
 
     status = get_json(f"{VAULT_BASE}/status")
-    to_update = sorted(s for s, info in status.items() if info.get("exists"))
-    to_skip = sorted(s for s, info in status.items() if not info.get("exists"))
+    schedule_state = get_json(f"{VAULT_BASE}/schedule/state")
+    nightly_enabled = schedule_state.get("nightly_enabled", {})
 
-    if to_skip:
-        print(f"Skipping {len(to_skip)} source(s) with no archive yet "
-              f"(needs a one-time manual backfill first): {', '.join(to_skip)}")
+    no_data = sorted(s for s, info in status.items() if not info.get("exists"))
+    disabled = sorted(s for s in status if not nightly_enabled.get(s, True))
+    to_update = sorted(
+        s for s, info in status.items()
+        if info.get("exists") and nightly_enabled.get(s, True)
+    )
+
+    if no_data:
+        print(f"Skipping {len(no_data)} source(s) with no archive yet "
+              f"(needs a one-time manual backfill first): {', '.join(no_data)}")
+    if disabled:
+        print(f"Skipping {len(disabled)} source(s) with nightly updates turned off "
+              f"in the dashboard: {', '.join(disabled)}")
 
     ok, failed = [], []
     for source_id in to_update:
@@ -92,7 +105,7 @@ def main():
         ok.append(source_id)
 
     print(f"=== done: {len(ok)} updated, {len(failed)} failed, "
-          f"{len(to_skip)} skipped (no archive yet) ===")
+          f"{len(no_data)} skipped (no archive), {len(disabled)} skipped (disabled) ===")
     if failed:
         print(f"Failed: {', '.join(failed)}")
         sys.exit(1)
