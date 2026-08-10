@@ -433,6 +433,24 @@ def archive():
     job_id = db.log_start(source_id, mode, date_from, date_to)
 
     def generate():
+        # Thin wrapper: same per-source lock /repair uses, so the nightly
+        # timer, a one-off scheduled run, and a repair pass can never work
+        # the same source at once. See scheduler_db.py's source_locks note.
+        if not scheduler_db.lock_acquire(source_id, holder=f"archive:{mode}"):
+            held = scheduler_db.lock_status(source_id)
+            yield _sse({"type": "log", "level": "error",
+                        "msg": f"{source_id} is locked by "
+                               f"'{held and held['holder']}' right now -- skipping"})
+            yield _sse({"type": "done", "seen": 0, "saved": 0, "total_db": 0,
+                        "min_date": None, "max_date": None, "size_mb": 0,
+                        "coverage": {}, "job_status": "locked"})
+            return
+        try:
+            yield from _generate_archive()
+        finally:
+            scheduler_db.lock_release(source_id)
+
+    def _generate_archive():
         label = f"{mode.upper()} {source_id}  {date_from} → {date_to}"
         yield _sse({"type": "log", "level": "info", "msg": f"🐋 {label}"})
 
@@ -548,6 +566,144 @@ def archive():
             "coverage": status["coverage"],
             "job_status": job_status,
         })
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── repair: fix already-stored bad body_text in place (added 2026-08-10) ────
+# /archive re-running a date range does NOT fix existing rows -- inserts are
+# INSERT OR IGNORE, so a URL that's already there (even with a bad body)
+# just gets silently skipped. This is a real UPDATE path instead. Bounded by
+# `limit` per call on purpose -- call it repeatedly (see
+# deploy/elpinguino_repair.py) rather than trying to fix everything in one
+# unbounded request.
+#
+# Only sources whose scraper exposes a single-URL _fetch_body() can use
+# this (currently just El Pingüino, the one this was built for) --
+# WordPress-based sources get their full body straight from the REST API in
+# one shot and don't have (or need) a per-article re-fetch path.
+REPAIRABLE_SOURCES = {"elpinguino"}
+
+
+@app.route("/repair")
+def repair():
+    source_id = request.args.get("source")
+    limit = int(request.args.get("limit", 200))
+
+    if source_id not in REPAIRABLE_SOURCES:
+        return jsonify({"error": f"'{source_id}' doesn't support /repair "
+                                  f"(only: {sorted(REPAIRABLE_SOURCES)})"}), 400
+
+    scraper = get_scraper(source_id)
+    if not scraper or not hasattr(scraper, "_fetch_body"):
+        return jsonify({"error": "scraper has no single-URL fetch method"}), 400
+
+    db.init_db(source_id)  # runs the repair_checked_at migration if not already applied
+
+    def generate():
+        if not scheduler_db.lock_acquire(source_id, holder="repair"):
+            held_by = scheduler_db.lock_status(source_id)
+            yield _sse({"type": "log", "level": "error",
+                        "msg": f"{source_id} is locked by '{held_by and held_by['holder']}' "
+                               f"right now -- try later"})
+            yield _sse({"type": "done", "checked": 0, "improved": 0, "remaining": None})
+            return
+        try:
+            batch = db.get_unrepaired_short_articles(source_id, limit=limit)
+            remaining_before = db.count_unrepaired_short(source_id)
+            yield _sse({"type": "log", "level": "info",
+                        "msg": f"🔧 Repair batch: {len(batch)} articles "
+                               f"({remaining_before} total still unrepaired)"})
+
+            checked, improved = 0, 0
+            for art in batch:
+                result = scraper._fetch_body(art["url"], delay=1.5)
+                new_body = result[3] if result else ""
+                new_image = result[4] if result else ""
+                did_improve = db.apply_repair_result(source_id, art["id"], new_body, new_image)
+                checked += 1
+                if did_improve:
+                    improved += 1
+                yield _sse({
+                    "type": "progress", "checked": checked, "total": len(batch),
+                    "improved": improved, "url": art["url"],
+                })
+
+            remaining_after = db.count_unrepaired_short(source_id)
+            yield _sse({
+                "type": "done", "checked": checked, "improved": improved,
+                "remaining": remaining_after,
+            })
+            yield _sse({"type": "log", "level": "info",
+                        "msg": f"✓ Repair batch done: {improved}/{checked} improved, "
+                               f"{remaining_after} still left"})
+        finally:
+            scheduler_db.lock_release(source_id)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── image file backfill (added 2026-08-10) ───────────────────────────────────
+# Generic across any source with data (unlike /repair, which needs a
+# scraper-specific single-URL body fetch) -- this just downloads whatever
+# image_url values already exist. See vault/images.py.
+
+@app.route("/images/backfill")
+def images_backfill():
+    source_id = request.args.get("source")
+    limit = int(request.args.get("limit", 200))
+
+    if not source_id or source_id not in SOURCES:
+        return jsonify({"error": "Unknown source"}), 400
+
+    db.init_db(source_id)
+
+    def generate():
+        if not scheduler_db.lock_acquire(source_id, holder="images"):
+            held = scheduler_db.lock_status(source_id)
+            yield _sse({"type": "log", "level": "error",
+                        "msg": f"{source_id} is locked by "
+                               f"'{held and held['holder']}' right now -- try later"})
+            yield _sse({"type": "done", "checked": 0, "downloaded": 0, "remaining": None})
+            return
+        try:
+            import images as images_mod
+            batch = db.get_articles_missing_image_file(source_id, limit=limit)
+            remaining_before = db.count_missing_image_files(source_id)
+            yield _sse({"type": "log", "level": "info",
+                        "msg": f"🖼 Image batch: {len(batch)} articles "
+                               f"({remaining_before} total still missing)"})
+
+            checked, downloaded = 0, 0
+            for art in batch:
+                local_path = images_mod.download_image(art["image_url"])
+                db.set_image_result(source_id, art["id"], local_path)
+                checked += 1
+                if local_path:
+                    downloaded += 1
+                yield _sse({
+                    "type": "progress", "checked": checked, "total": len(batch),
+                    "downloaded": downloaded, "url": art["image_url"],
+                })
+
+            remaining_after = db.count_missing_image_files(source_id)
+            yield _sse({
+                "type": "done", "checked": checked, "downloaded": downloaded,
+                "remaining": remaining_after,
+            })
+            yield _sse({"type": "log", "level": "info",
+                        "msg": f"✓ Image batch done: {downloaded}/{checked} downloaded, "
+                               f"{remaining_after} still left"})
+        finally:
+            scheduler_db.lock_release(source_id)
 
     return Response(
         stream_with_context(generate()),

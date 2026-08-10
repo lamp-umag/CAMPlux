@@ -63,9 +63,83 @@ def init_db():
             skipped_disabled_count INTEGER NOT NULL,
             detail_json TEXT
         );
+        CREATE TABLE IF NOT EXISTS source_locks (
+            source_id TEXT PRIMARY KEY,
+            holder TEXT NOT NULL,
+            acquired_at TEXT NOT NULL
+        );
     """)
     con.commit()
     con.close()
+
+
+# ── per-source locks (added 2026-08-10) ──────────────────────────────────────
+# So the nightly timer (host-side script), the one-off scheduler tick
+# (host-side), and /repair (in-process, this container) never work the same
+# source at once -- polite to the target site and avoids two writers on the
+# same per-source DB. Coordinated here (not a plain lock file) specifically
+# because nightly_archive.py runs on the HOST while /repair runs INSIDE this
+# container, and the container's data volume isn't directly host-writable
+# (root-owned Docker volume) -- HTTP through Vault's own API is the one path
+# both sides already have.
+#
+# Locks auto-expire after LOCK_TTL_MINUTES. Originally designed with no
+# expiry at all ("a stuck holder should stay visible, not be silently
+# reclaimed") -- revised the same night after a container restart (from a
+# code rebuild, mid-repair-batch) killed a holder's process without ever
+# reaching its `finally: lock_release()`, orphaning the lock permanently.
+# For a single-operator box meant to run unattended overnight, a
+# permanently-stuck lock is worse than the small risk of a TTL reclaim
+# racing a still-alive holder -- every write here is already idempotent-safe
+# (INSERT OR IGNORE / UPDATE-by-id), so the worst case of a false reclaim is
+# two batches briefly overlapping, not corruption. Reclaims are logged
+# loudly so they're visible after the fact even though nobody's watching
+# live.
+LOCK_TTL_MINUTES = 30
+
+
+def lock_acquire(source_id, holder):
+    con = _connect()
+    try:
+        existing = con.execute(
+            "SELECT holder, acquired_at FROM source_locks WHERE source_id = ?", (source_id,)
+        ).fetchone()
+        if existing:
+            age_min = (
+                datetime.datetime.now(datetime.UTC)
+                - datetime.datetime.fromisoformat(existing["acquired_at"])
+            ).total_seconds() / 60
+            if age_min < LOCK_TTL_MINUTES:
+                return False  # genuinely locked by someone else, still fresh
+            print(f"[scheduler_db] reclaiming stale lock on '{source_id}' "
+                  f"(held by '{existing['holder']}', {age_min:.0f} min old)", flush=True)
+            con.execute("DELETE FROM source_locks WHERE source_id = ?", (source_id,))
+        con.execute(
+            "INSERT INTO source_locks (source_id, holder, acquired_at) VALUES (?, ?, ?)",
+            (source_id, holder, now_iso()),
+        )
+        con.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False  # lost a race to another acquirer -- fine, they got it first
+    finally:
+        con.close()
+
+
+def lock_release(source_id):
+    con = _connect()
+    con.execute("DELETE FROM source_locks WHERE source_id = ?", (source_id,))
+    con.commit()
+    con.close()
+
+
+def lock_status(source_id):
+    con = _connect()
+    row = con.execute(
+        "SELECT holder, acquired_at FROM source_locks WHERE source_id = ?", (source_id,)
+    ).fetchone()
+    con.close()
+    return dict(row) if row else None
 
 
 def now_iso():

@@ -23,6 +23,7 @@ import queue
 import threading
 import time
 import logging
+import concurrent.futures as cf
 from datetime import date, timedelta
 from bs4 import BeautifulSoup
 
@@ -71,6 +72,15 @@ class ElPinguinoScraper(BaseScraper):
     name      = "El Pingüino"
     base_url  = BASE
     min_delay = 1.0
+    # Bounded concurrency for bulk-mode per-article fetches. Measured with
+    # deploy/elpinguino_worker_test.py on 2026-08-10 (20 real article URLs,
+    # same success rate at every level tested):
+    #   workers=1  0.64 articles/s   workers=3  1.72/s
+    #   workers=5  2.76/s (chosen)   workers=8  3.55/s
+    # 5 is a solid ~4.3x speedup without pushing to the most aggressive
+    # setting tested -- this site is Cloudflare-fronted and we depend on it
+    # long-term, no reason to lean on the ceiling.
+    BULK_WORKERS = 5
 
     # ------------------------------------------------------------------ date API (single)
 
@@ -152,10 +162,51 @@ class ElPinguinoScraper(BaseScraper):
 
     # ------------------------------------------------------------------ article page
 
-    def _fetch_body(self, url, delay):
+    # Real bug found 2026-08-07: El Pingüino sits behind Cloudflare. When it
+    # serves a rate-limit/bot-challenge page, that response is still HTTP 200
+    # (so self.get()'s retry-on-network-error never triggers), the CSS
+    # selectors below simply find nothing on the challenge page, and the old
+    # code silently fell back to the API's ~10-word excerpt with no error
+    # logged anywhere -- affected 57% of the archive by the time anyone
+    # noticed (worse over time, presumably as Cloudflare protection tightened
+    # or scrape volume grew). Fixed by detecting a degraded response
+    # (challenge-page markers, or a suspiciously short body after a normal
+    # parse) and actually retrying instead of accepting it.
+    _CHALLENGE_MARKERS = (
+        "Just a moment", "cf-browser-verification", "Attention Required",
+        "cf-chl", "Enable JavaScript and cookies", "Checking your browser",
+    )
+    _MIN_PLAUSIBLE_BODY_CHARS = 150
+
+    def _fetch_body(self, url, delay, retries=3):
+        last_result = None
+        for attempt in range(retries):
+            result = self._fetch_body_once(url, delay if attempt == 0 else delay * 2)
+            if result is None:
+                continue  # network-level failure -- try again
+            _title, _date, _section, body_text, _image = result
+            looks_ok = len(body_text) >= self._MIN_PLAUSIBLE_BODY_CHARS
+            if looks_ok:
+                return result
+            last_result = result
+            if attempt < retries - 1:
+                time.sleep(3 * (attempt + 1))  # back off before retrying
+        # Ran out of retries. A genuine (if short) article body is still
+        # better than the caller's API-excerpt fallback -- keep it. But a
+        # real challenge-page hit leaves body_text empty (see
+        # _fetch_body_once), and an empty result here should fall through to
+        # that fallback rather than overwrite it with nothing.
+        if last_result and last_result[3]:
+            return last_result
+        return None
+
+    def _fetch_body_once(self, url, delay):
         r = self.get(url, delay=delay)
         if not r:
             return None
+
+        if any(marker in r.text for marker in self._CHALLENGE_MARKERS):
+            return "", "", "", "", ""  # looks_ok will be False -> triggers retry
 
         soup = BeautifulSoup(r.content, "lxml")
 
@@ -282,43 +333,54 @@ class ElPinguinoScraper(BaseScraper):
             yield {"type": "log", "level": "info",
                    "msg": f"Done — {total_articles} articles collected"}
 
-        # ---------- BULK MODE: sequential, one day at a time ----------
+        # ---------- BULK MODE: sequential day discovery, bounded-concurrent article fetch ----------
+        # Day-by-day date-API calls stay sequential (cheap, ~1KB JSON each).
+        # Per-article page fetches (the actual bottleneck -- at min_delay=1.5s
+        # sequential, a multi-year range is tens of hours of pure delay) run
+        # through a small bounded thread pool instead. BULK_WORKERS was
+        # chosen from an actual measured comparison, not guessed -- see
+        # deploy/elpinguino_worker_test.py and its logged results.
         else:
             total_days, total_articles = 0, 0
-            for date_str in iter_dates(date_from, date_to):
-                total_days += 1
-                _, items = self._fetch_day_raw(self.session, date_str, delay=max(delay, self.min_delay))
+            with cf.ThreadPoolExecutor(max_workers=self.BULK_WORKERS) as pool:
+                for date_str in iter_dates(date_from, date_to):
+                    total_days += 1
+                    _, items = self._fetch_day_raw(self.session, date_str, delay=max(delay, self.min_delay))
 
-                for item in items:
-                    api_title   = item.get("post_title", "")
-                    api_excerpt = item.get("post_excerpt", "")
-                    url = build_url(item, date_str)
+                    if items:
+                        def fetch_one(item, date_str=date_str):
+                            url = build_url(item, date_str)
+                            return item, url, self._fetch_body(url, delay=max(delay, self.min_delay))
 
-                    result = self._fetch_body(url, delay=max(delay, self.min_delay))
-                    if result:
-                        title, art_date, section, body_text, image_url = result
-                    else:
-                        title, art_date, section, body_text, image_url = (
-                            api_title, date_str, item.get("post_category", ""),
-                            api_excerpt, "")
+                        futures = [pool.submit(fetch_one, item) for item in items]
+                        for fut in cf.as_completed(futures):
+                            item, url, result = fut.result()
+                            api_title   = item.get("post_title", "")
+                            api_excerpt = item.get("post_excerpt", "")
+                            if result:
+                                title, art_date, section, body_text, image_url = result
+                            else:
+                                title, art_date, section, body_text, image_url = (
+                                    api_title, date_str, item.get("post_category", ""),
+                                    api_excerpt, "")
 
-                    yield {
-                        "type": "article",
-                        "data": {
-                            "source":    "El Pingüino",
-                            "date":      art_date or date_str,
-                            "title":     title or api_title,
-                            "url":       url,
-                            "body_text": body_text or api_excerpt,
-                            "section":   section or item.get("post_category", ""),
-                            "image_url": image_url,
-                        },
-                    }
-                    total_articles += 1
+                            yield {
+                                "type": "article",
+                                "data": {
+                                    "source":    "El Pingüino",
+                                    "date":      art_date or date_str,
+                                    "title":     title or api_title,
+                                    "url":       url,
+                                    "body_text": body_text or api_excerpt,
+                                    "section":   section or item.get("post_category", ""),
+                                    "image_url": image_url,
+                                },
+                            }
+                            total_articles += 1
 
-                if total_days % 10 == 0:
-                    yield {"type": "log", "level": "info",
-                           "msg": f"  {total_days} days, {total_articles} articles so far"}
+                    if total_days % 10 == 0:
+                        yield {"type": "log", "level": "info",
+                               "msg": f"  {total_days} days, {total_articles} articles so far"}
 
             yield {"type": "log", "level": "info",
                    "msg": f"Done — {total_days} days scanned, {total_articles} articles collected"}

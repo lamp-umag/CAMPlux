@@ -136,6 +136,20 @@ def init_db(source_id):
     cols = [r[1] for r in con.execute("PRAGMA table_info(articles)").fetchall()]
     if "image_url" not in cols:
         con.execute("ALTER TABLE articles ADD COLUMN image_url TEXT")
+    # Migration: repair_checked_at tracks the body-text repair pass (2026-08-10)
+    # -- NULL means "not attempted yet", set on every attempt (success or a
+    # genuinely-short-article outcome) so repair makes monotonic progress
+    # instead of re-selecting the same rows forever.
+    if "repair_checked_at" not in cols:
+        con.execute("ALTER TABLE articles ADD COLUMN repair_checked_at TEXT")
+    # Migration: image_local_path (2026-08-10) -- NULL = not attempted,
+    # '' = attempted but failed/no image, non-empty = downloaded successfully.
+    # Distinguishing "failed" from "not tried" the same way repair_checked_at
+    # does, so a backfill pass makes monotonic progress instead of retrying
+    # the same permanently-broken URLs forever.
+    if "image_local_path" not in cols:
+        con.execute("ALTER TABLE articles ADD COLUMN image_local_path TEXT")
+        con.execute("ALTER TABLE articles ADD COLUMN image_checked_at TEXT")
     con.commit()
     con.close()
 
@@ -166,6 +180,107 @@ def insert_articles(source_id, articles):
     con.close()
     inserted = after - before
     return inserted, len(rows) - inserted
+
+
+# ── body-text repair (added 2026-08-10, see scrapers/elpinguino.py) ─────────
+# Re-scraping a date range that already has data does nothing --
+# insert_articles() is INSERT OR IGNORE, so an existing (bad) row's URL
+# conflict just gets silently skipped. Repairing existing rows needs an
+# actual UPDATE path, which is what these do.
+
+MIN_PLAUSIBLE_BODY_CHARS = 150
+
+
+def count_unrepaired_short(source_id):
+    con = connect(source_id)
+    n = con.execute(
+        "SELECT COUNT(*) FROM articles "
+        "WHERE LENGTH(body_text) < ? AND repair_checked_at IS NULL",
+        (MIN_PLAUSIBLE_BODY_CHARS,),
+    ).fetchone()[0]
+    con.close()
+    return n
+
+
+def get_unrepaired_short_articles(source_id, limit=200):
+    con = connect(source_id)
+    con.row_factory = sqlite3.Row
+    rows = con.execute(
+        "SELECT id, url, date, body_text FROM articles "
+        "WHERE LENGTH(body_text) < ? AND repair_checked_at IS NULL "
+        "ORDER BY date DESC LIMIT ?",
+        (MIN_PLAUSIBLE_BODY_CHARS, limit),
+    ).fetchall()
+    con.close()
+    return [dict(r) for r in rows]
+
+
+def apply_repair_result(source_id, article_id, new_body_text, new_image_url):
+    """Always stamps repair_checked_at (attempted), and only overwrites
+    body_text/image_url if the new fetch actually produced something
+    longer -- a genuinely short article (real content, just brief) keeps
+    its real text rather than being blanked by a fetch that came back
+    short again for a legitimate reason."""
+    con = connect(source_id)
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    row = con.execute("SELECT body_text FROM articles WHERE id = ?", (article_id,)).fetchone()
+    old_len = len(row[0] or "") if row else 0
+    improved = new_body_text and len(new_body_text) > old_len
+    if improved:
+        con.execute(
+            "UPDATE articles SET body_text = ?, image_url = COALESCE(NULLIF(?, ''), image_url), "
+            "repair_checked_at = ? WHERE id = ?",
+            (new_body_text, new_image_url or "", now, article_id),
+        )
+    else:
+        con.execute(
+            "UPDATE articles SET repair_checked_at = ? WHERE id = ?",
+            (now, article_id),
+        )
+    con.commit()
+    con.close()
+    return improved
+
+
+# ── image file backfill (added 2026-08-10) ───────────────────────────────────
+# image_url alone rots (external links die); this downloads the actual bytes.
+# See vault/images.py for the fetch itself.
+
+def count_missing_image_files(source_id):
+    con = connect(source_id)
+    n = con.execute(
+        "SELECT COUNT(*) FROM articles WHERE image_url != '' AND image_url IS NOT NULL "
+        "AND image_checked_at IS NULL"
+    ).fetchone()[0]
+    con.close()
+    return n
+
+
+def get_articles_missing_image_file(source_id, limit=200):
+    con = connect(source_id)
+    con.row_factory = sqlite3.Row
+    rows = con.execute(
+        "SELECT id, url, image_url FROM articles "
+        "WHERE image_url != '' AND image_url IS NOT NULL AND image_checked_at IS NULL "
+        "ORDER BY date DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    con.close()
+    return [dict(r) for r in rows]
+
+
+def set_image_result(source_id, article_id, local_path):
+    """local_path: relative path string on success, None/'' on failure (still
+    stamps image_checked_at either way, so a permanently-dead image URL
+    doesn't get retried forever)."""
+    con = connect(source_id)
+    now = datetime.datetime.now(datetime.UTC).isoformat()
+    con.execute(
+        "UPDATE articles SET image_local_path = ?, image_checked_at = ? WHERE id = ?",
+        (local_path or "", now, article_id),
+    )
+    con.commit()
+    con.close()
 
 
 # ── scrape log ────────────────────────────────────────────────────────────────

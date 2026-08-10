@@ -27,6 +27,11 @@ automatically like any other source.
 
 Also respects the per-source "nightly" toggle in the dashboard
 (vault/schedule/state) -- a source with data but toggled off is skipped too.
+
+Locking against other jobs (a manual repair pass, a one-off scheduled run)
+is handled server-side, inside /archive itself (see scheduler_db.py's
+source_locks) -- this script doesn't need its own lock check, it just needs
+to read a "locked" outcome as a skip, not a failure (see run_update()).
 """
 import datetime
 import json
@@ -92,7 +97,7 @@ def main():
         print(f"Skipping {len(disabled)} source(s) with nightly updates turned off "
               f"in the dashboard: {', '.join(disabled)}")
 
-    ok, failed = [], []
+    ok, failed, locked_out = [], [], []
     detail = {}
     for source_id in to_update:
         print(f"--- updating {source_id} ---")
@@ -110,6 +115,12 @@ def main():
             detail[source_id] = {"status": "error", "note": "no 'done' event"}
             continue
 
+        if result.get("job_status") == "locked":
+            print(f"  locked by another job right now, skipping tonight")
+            locked_out.append(source_id)
+            detail[source_id] = {"status": "locked"}
+            continue
+
         print(f"  saved={result.get('saved')} seen={result.get('seen')} "
               f"total_db={result.get('total_db')} "
               f"range={result.get('min_date')}..{result.get('max_date')}")
@@ -121,7 +132,8 @@ def main():
 
     finished = datetime.datetime.now(datetime.UTC).isoformat()
     print(f"=== done: {len(ok)} updated, {len(failed)} failed, "
-          f"{len(no_data)} skipped (no archive), {len(disabled)} skipped (disabled) ===")
+          f"{len(no_data)} skipped (no archive), {len(disabled)} skipped (disabled), "
+          f"{len(locked_out)} skipped (locked by another job) ===")
 
     try:
         post_json(f"{VAULT_BASE}/schedule/nightly_run", {

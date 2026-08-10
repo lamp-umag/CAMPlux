@@ -10,6 +10,7 @@ __pycache__/
 */output/
 */uploads/
 logs/
+deploy/logs_*.log
 
 # ── Environment / OS ────────────────────────────────────
 .env
