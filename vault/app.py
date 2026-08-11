@@ -5,7 +5,7 @@ import os
 import uuid
 from logging.handlers import RotatingFileHandler
 from flask import Flask, Response, jsonify, render_template, request
-from flask import stream_with_context
+from flask import stream_with_context, send_from_directory, abort
 from waitress import serve
 
 import db
@@ -710,6 +710,64 @@ def images_backfill():
         mimetype="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ── explorer: simple search/browse UI (added 2026-08-11) ────────────────────
+
+@app.route("/explore")
+def explore():
+    return render_template(
+        "explore.html", sources=SOURCES, names=SOURCE_NAMES,
+    )
+
+
+@app.route("/api/search")
+def api_search():
+    source_id = request.args.get("source")
+    if not source_id or source_id not in SOURCES:
+        return jsonify({"error": "Unknown source"}), 400
+
+    q = request.args.get("q", "").strip()
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+    limit = min(int(request.args.get("limit", 25)), 100)
+    offset = max(int(request.args.get("offset", 0)), 0)
+
+    try:
+        rows, total = db.search_articles(source_id, q, date_from, date_to, limit, offset)
+    except Exception as e:
+        # Most likely an invalid FTS5 query syntax (unbalanced quotes etc.)
+        return jsonify({"error": f"Search error: {e}"}), 400
+
+    for r in rows:
+        # Trim body_text for the list view -- full text is fetched on expand,
+        # no need to ship 190KB articles for every row in a page of results.
+        r["snippet"] = (r["body_text"] or "")[:280]
+        del r["body_text"]
+
+    return jsonify({"rows": rows, "total": total, "limit": limit, "offset": offset})
+
+
+@app.route("/api/article/<source_id>/<int:article_id>")
+def api_article(source_id, article_id):
+    if source_id not in SOURCES:
+        return jsonify({"error": "Unknown source"}), 400
+    con = db.connect(source_id)
+    row = con.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
+    con.close()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(dict(row))
+
+
+@app.route("/api/image/<path:rel_path>")
+def api_image(rel_path):
+    # rel_path looks like "images/ab/abcd1234....jpg" -- images.py always
+    # writes under vault/data/images/, so require that prefix and let
+    # send_from_directory's own normalisation refuse any ../ escape attempt.
+    if not rel_path.startswith("images/"):
+        abort(404)
+    return send_from_directory(db.DATA_DIR, rel_path)
 
 
 def _sse(data):

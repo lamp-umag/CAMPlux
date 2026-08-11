@@ -377,3 +377,43 @@ def get_update_start(source_id):
         return ARCHIVE_STARTS.get(source_id, "2010-01-01")
     dt = datetime.date.fromisoformat(status["max_date"])
     return (dt - datetime.timedelta(days=2)).isoformat()
+
+
+# ── explorer: simple search/browse UI backend (added 2026-08-11) ────────────
+
+def search_articles(source_id, query_str="", date_from="", date_to="", limit=25, offset=0):
+    if not db_exists(source_id):
+        return [], 0
+    d_from = date_from or "0000-01-01"
+    d_to = date_to or "9999-12-31"
+    con = connect(source_id)
+    con.row_factory = sqlite3.Row
+
+    use_fts = bool(query_str)
+    cols = "id, source, date, title, url, body_text, section, image_url, image_local_path"
+    cols_a = ", ".join(f"a.{c}" for c in cols.split(", "))
+    if use_fts:
+        # Sorted by date below (like the no-query browse case), not FTS
+        # relevance -- simpler and more predictable for "browse an archive"
+        # than mixing two different sort semantics depending on whether a
+        # query was typed.
+        base = (
+            f"SELECT {cols_a} FROM articles a JOIN articles_fts f ON a.id = f.rowid "
+            "WHERE articles_fts MATCH ? AND a.date BETWEEN ? AND ?"
+        )
+        count_base = (
+            "SELECT COUNT(*) FROM articles a JOIN articles_fts f ON a.id = f.rowid "
+            "WHERE articles_fts MATCH ? AND a.date BETWEEN ? AND ?"
+        )
+        params = (query_str, d_from, d_to)
+    else:
+        base = f"SELECT {cols} FROM articles a WHERE a.date BETWEEN ? AND ?"
+        count_base = "SELECT COUNT(*) FROM articles a WHERE a.date BETWEEN ? AND ?"
+        params = (d_from, d_to)
+
+    total = con.execute(count_base, params).fetchone()[0]
+    rows = con.execute(
+        base + " ORDER BY a.date DESC LIMIT ? OFFSET ?", params + (limit, offset)
+    ).fetchall()
+    con.close()
+    return [dict(r) for r in rows], total

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAMPlux-Vault — Explorar</title>
+<style>
+  :root {
+    --bg: #0a0e1a; --surface: #121828; --surface2: #1a2236;
+    --border: #1e2d45; --accent: #2e7fd8; --accent2: #1a5fa8;
+    --text: #c8d8f0; --muted: #5a7099; --ok: #3aaa6e;
+    --warn: #d8a83a; --err: #d84444; --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+
+  header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 14px; }
+  header h1 { font-size: 18px; color: var(--accent); }
+  header a { color: var(--muted); font-size: 12px; text-decoration: none; }
+  header a:hover { color: var(--text); }
+
+  .toolbar {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    padding: 14px 24px; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  select, input, button {
+    background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 10px; font-size: 13px;
+  }
+  input[type="text"] { min-width: 240px; flex: 1; }
+  input[type="date"] { color-scheme: dark; }
+  button { cursor: pointer; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+  button:hover { background: var(--accent2); }
+  button.ghost { background: transparent; border-color: var(--border); font-weight: 400; color: var(--muted); }
+
+  main { padding: 16px 24px; }
+  .meta { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-size: 11px; text-transform: uppercase; font-weight: 600; }
+  tr.result-row { cursor: pointer; }
+  tr.result-row:hover { background: var(--surface); }
+  .date-col { white-space: nowrap; color: var(--muted); font-size: 12px; }
+  .title-col { font-weight: 600; }
+  .snippet { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .thumb-col img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; }
+  .thumb-placeholder { width: 48px; height: 48px; border-radius: 4px; background: var(--surface2); }
+
+  .detail {
+    display: none; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; margin: 8px 0 16px;
+  }
+  .detail.open { display: block; }
+  .detail img { max-width: 320px; border-radius: 6px; margin-bottom: 10px; }
+  .detail .body { white-space: pre-wrap; line-height: 1.5; }
+  .detail .article-meta { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .detail a { color: var(--accent); }
+
+  .pager { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
+  .pager span { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔍 CAMPlux-Vault — Explorar</h1>
+  <a href="/">← volver al panel principal</a>
+</header>
+
+<div class="toolbar">
+  <select id="source">
+    {% for sid in sources %}
+    <option value="{{ sid }}">{{ names.get(sid, sid) }}</option>
+    {% endfor %}
+  </select>
+  <input type="text" id="q" placeholder="Buscar texto (opcional)…">
+  <input type="date" id="date_from">
+  <span style="color:var(--muted)">→</span>
+  <input type="date" id="date_to">
+  <button onclick="runSearch(true)">Buscar</button>
+  <button class="ghost" onclick="clearFilters()">Limpiar</button>
+</div>
+
+<main>
+  <div class="meta" id="resultMeta">Elige una fuente y busca.</div>
+  <table>
+    <thead><tr>
+      <th style="width:52px"></th>
+      <th style="width:100px">Fecha</th>
+      <th>Título</th>
+    </tr></thead>
+    <tbody id="resultsBody"></tbody>
+  </table>
+  <div class="pager">
+    <button class="ghost" id="prevBtn" onclick="prevPage()">‹ Anterior</button>
+    <span id="pageInfo"></span>
+    <button class="ghost" id="nextBtn" onclick="nextPage()">Siguiente ›</button>
+  </div>
+</main>
+
+<script>
+const PAGE_SIZE = 25;
+let offset = 0;
+let lastTotal = 0;
+let openRowId = null;
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function clearFilters() {
+  document.getElementById('q').value = '';
+  document.getElementById('date_from').value = '';
+  document.getElementById('date_to').value = '';
+  runSearch(true);
+}
+
+async function runSearch(resetOffset) {
+  if (resetOffset) offset = 0;
+  const source = document.getElementById('source').value;
+  const q = document.getElementById('q').value.trim();
+  const date_from = document.getElementById('date_from').value;
+  const date_to = document.getElementById('date_to').value;
+
+  const params = new URLSearchParams({ source, limit: PAGE_SIZE, offset });
+  if (q) params.set('q', q);
+  if (date_from) params.set('date_from', date_from);
+  if (date_to) params.set('date_to', date_to);
+
+  const resultMeta = document.getElementById('resultMeta');
+  resultMeta.textContent = 'Buscando…';
+
+  let data;
+  try {
+    const res = await fetch('/api/search?' + params.toString());
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error');
+  } catch (e) {
+    resultMeta.textContent = 'Error: ' + e.message;
+    document.getElementById('resultsBody').innerHTML = '';
+    return;
+  }
+
+  lastTotal = data.total;
+  resultMeta.textContent = `${data.total.toLocaleString('es-CL')} resultado(s)`;
+  renderRows(data.rows, source);
+  updatePager();
+}
+
+function renderRows(rows, source) {
+  const body = document.getElementById('resultsBody');
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="3" style="color:var(--muted)">Sin resultados.</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(r => `
+    <tr class="result-row" onclick="toggleDetail(${r.id}, '${source}')">
+      <td class="thumb-col">
+        ${r.image_local_path
+          ? `<img src="/api/image/${r.image_local_path}" loading="lazy">`
+          : '<div class="thumb-placeholder"></div>'}
+      </td>
+      <td class="date-col">${esc(r.date)}</td>
+      <td>
+        <div class="title-col">${esc(r.title || '(sin título)')}</div>
+        <div class="snippet">${esc(r.snippet)}${r.snippet && r.snippet.length >= 280 ? '…' : ''}</div>
+      </td>
+    </tr>
+    <tr id="detail-${r.id}"><td colspan="3"><div class="detail" id="detail-box-${r.id}"></div></td></tr>
+  `).join('');
+}
+
+async function toggleDetail(id, source) {
+  const box = document.getElementById(`detail-box-${id}`);
+  if (!box) return;
+
+  if (openRowId !== null && openRowId !== id) {
+    const prev = document.getElementById(`detail-box-${openRowId}`);
+    if (prev) prev.classList.remove('open');
+  }
+
+  if (box.classList.contains('open')) {
+    box.classList.remove('open');
+    openRowId = null;
+    return;
+  }
+
+  box.innerHTML = '<div style="color:var(--muted)">Cargando…</div>';
+  box.classList.add('open');
+  openRowId = id;
+
+  const res = await fetch(`/api/article/${source}/${id}`);
+  const a = await res.json();
+  if (!res.ok) {
+    box.innerHTML = `<div style="color:var(--err)">${esc(a.error || 'Error')}</div>`;
+    return;
+  }
+
+  box.innerHTML = `
+    ${a.image_local_path ? `<img src="/api/image/${a.image_local_path}">` : ''}
+    <div class="article-meta">
+      ${esc(a.section || '')} · ${esc(a.date)} ·
+      <a href="${esc(a.url)}" target="_blank" rel="noopener">ver original ↗</a>
+    </div>
+    <div class="body">${esc(a.body_text || '(sin texto)')}</div>
+  `;
+}
+
+function updatePager() {
+  document.getElementById('pageInfo').textContent =
+    `${offset + 1}–${Math.min(offset + PAGE_SIZE, lastTotal)} de ${lastTotal}`;
+  document.getElementById('prevBtn').disabled = offset === 0;
+  document.getElementById('nextBtn').disabled = offset + PAGE_SIZE >= lastTotal;
+}
+
+function prevPage() {
+  offset = Math.max(0, offset - PAGE_SIZE);
+  runSearch(false);
+}
+function nextPage() {
+  offset = offset + PAGE_SIZE;
+  runSearch(false);
+}
+
+document.getElementById('q').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runSearch(true);
+});
+document.getElementById('source').addEventListener('change', () => runSearch(true));
+
+runSearch(true);
+</script>
+</body>
+</html>
