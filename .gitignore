@@ -11,6 +11,7 @@ __pycache__/
 */uploads/
 logs/
 deploy/logs_*.log
+deploy/.ovejero_gapfill_progress.json
 
 # ── Environment / OS ────────────────────────────────────
 .env
