@@ -74,6 +74,12 @@ SOURCES = (
     + SOURCE_GROUPS["regional"]["sources"]
 )
 
+# Explorer, for now, only surfaces Magallanes press -- excludes "nacional",
+# "regional" (other regions), and "internacional". User request
+# 2026-08-11, scoped to /explore only; scraping/archiving still covers
+# all of SOURCES. Revert by setting this back to SOURCES.
+EXPLORE_SOURCES = tuple(SOURCE_GROUPS["magallanes"]["sources"])
+
 SOURCE_NAMES = {
     # Magallanes
     "elpinguino":      "El Pingüino",
@@ -731,14 +737,14 @@ def images_backfill():
 @app.route("/explore")
 def explore():
     return render_template(
-        "explore.html", sources=SOURCES, names=SOURCE_NAMES,
+        "explore.html", sources=EXPLORE_SOURCES, names=SOURCE_NAMES,
     )
 
 
 @app.route("/api/search")
 def api_search():
     source_id = request.args.get("source", "all")
-    if source_id != "all" and source_id not in SOURCES:
+    if source_id != "all" and source_id not in EXPLORE_SOURCES:
         return jsonify({"error": "Unknown source"}), 400
 
     q = request.args.get("q", "").strip()
@@ -749,7 +755,8 @@ def api_search():
 
     try:
         if source_id == "all":
-            rows, total = db.search_all_sources(q, date_from, date_to, limit, offset)
+            rows, total = db.search_all_sources(q, date_from, date_to, limit, offset,
+                                                  source_ids=EXPLORE_SOURCES)
         else:
             rows, total = db.search_articles(source_id, q, date_from, date_to, limit, offset)
     except Exception as e:
@@ -785,13 +792,13 @@ def _csv_field(val):
 @app.route("/api/export.csv")
 def api_export_csv():
     source_id = request.args.get("source", "all")
-    if source_id != "all" and source_id not in SOURCES:
+    if source_id != "all" and source_id not in EXPLORE_SOURCES:
         return jsonify({"error": "Unknown source"}), 400
 
     q = request.args.get("q", "").strip()
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
-    source_ids = list(SOURCES) if source_id == "all" else [source_id]
+    source_ids = list(EXPLORE_SOURCES) if source_id == "all" else [source_id]
 
     def generate():
         import csv, io

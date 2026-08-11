@@ -458,16 +458,19 @@ def list_source_ids_with_data():
     )
 
 
-def search_all_sources(query_str="", date_from="", date_to="", limit=25, offset=0):
+def search_all_sources(query_str="", date_from="", date_to="", limit=25, offset=0, source_ids=None):
     """Fans out to every source's own DB and merges by date. Simple, not
     maximally efficient (each source is queried for up to offset+limit rows
     even though most of that gets discarded after the merge) -- fine at this
     scale (a couple dozen local SQLite files), not built to paginate deep
-    into a huge merged result set quickly."""
+    into a huge merged result set quickly.
+
+    source_ids: restrict the fan-out to this explicit list instead of every
+    DB file found on disk (e.g. app.py's regional-only explorer filter)."""
     need = offset + limit
     total = 0
     pooled = []
-    for source_id in list_source_ids_with_data():
+    for source_id in (source_ids if source_ids is not None else list_source_ids_with_data()):
         rows, count = search_articles(source_id, query_str, date_from, date_to, limit=need, offset=0)
         total += count
         pooled.extend(rows)
