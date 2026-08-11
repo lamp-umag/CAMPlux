@@ -106,6 +106,12 @@ class RadioPolarScraper(BaseScraper):
         tags = [t.get("name", "") for t in post.get("tags", [])]
         section = ", ".join(t for t in tags if t)[:120]
 
+        # Usually the generic "Equipo Polar Comunicaciones" staff account,
+        # not an individual byline -- captured anyway since it's already
+        # in the same JSON blob, but don't expect it to answer "who wrote
+        # this opinion column" the way it can for WordPress-based sources.
+        author = (post.get("primaryAuthor") or {}).get("authorName", "") or ""
+
         return {
             "source":    "Radio Polar",
             "date":      (post.get("datePublished") or "")[:10],
@@ -113,6 +119,7 @@ class RadioPolarScraper(BaseScraper):
             "url":       url,
             "body_text": body_text,
             "section":   section,
+            "author":    author,
         }, False
 
     def run(self, query="", date_from="", date_to="", delay=1.5):

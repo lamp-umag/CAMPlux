@@ -9,8 +9,12 @@ from .base import BaseScraper
 
 logger = logging.getLogger(__name__)
 
-# _links is needed for _embed to follow; featured_media gives the image ID
-FIELDS = "id,date,title,link,excerpt,content,categories,featured_media,_links"
+# _links is needed for _embed to follow; featured_media gives the image ID.
+# author (numeric id) + _embedded gives the real byline via _embed=author --
+# WP's "post author" is a structured field, separate from the theme choosing
+# (or not) to also print "Por Fulano" inside the rendered content. _fields
+# strips any top-level key not listed here, including _embedded itself.
+FIELDS = "id,date,title,link,excerpt,content,categories,featured_media,author,_links,_embedded"
 
 # Browser-like UA for sites that block non-browser agents (e.g. itvpatagonia.com)
 BROWSER_UA = (
@@ -69,7 +73,7 @@ class WordPressScraper(BaseScraper):
         params = {
             "per_page": 100,
             "_fields":  FIELDS,
-            "_embed":   "wp:featuredmedia",
+            "_embed":   "wp:featuredmedia,author",
         }
         if query:
             params["search"] = query
@@ -156,6 +160,14 @@ class WordPressScraper(BaseScraper):
                 except Exception:
                     pass
 
+                author_name = ""
+                try:
+                    au = post.get("_embedded", {}).get("author", [])
+                    if au:
+                        author_name = au[0].get("name", "") or ""
+                except Exception:
+                    pass
+
                 yield {
                     "type": "article",
                     "data": {
@@ -166,6 +178,7 @@ class WordPressScraper(BaseScraper):
                         "body_text": body_text,
                         "section":   ", ".join(cat_names),
                         "image_url": image_url,
+                        "author":    author_name,
                         "excerpt":   excerpt,
                     },
                 }
@@ -180,3 +193,62 @@ class WordPressScraper(BaseScraper):
                 "pages": failed_pages,
                 "msg": f"Skipped {len(failed_pages)} pages due to network errors: {failed_pages}",
             }
+
+    def run_author_backfill(self, delay=1.0):
+        """Sweeps every post for (url, author) only -- tiny payload per page
+        (no content/excerpt) -- for backfilling the author column on rows
+        that predate the author fix, without a full re-scrape."""
+        actual_delay = max(delay, self.min_delay)
+        params = {
+            "per_page": 100,
+            # _links must be requested too -- WP resolves _embedded from the
+            # _links structure, so stripping _links via _fields silently
+            # breaks embedding even though _embedded is listed (found live).
+            "_fields":  "link,author,_links,_embedded",
+            "_embed":   "author",
+            "page":     1,
+        }
+        page = 1
+        total_pages = None
+        while True:
+            params["page"] = page
+            r = self.get(f"{self._api}/posts", delay=actual_delay, params=params)
+            if not r:
+                yield {"type": "log", "level": "warn", "msg": f"  ✗ page {page} failed — stopping"}
+                break
+
+            ct = r.headers.get("Content-Type", "")
+            if "html" in ct and "json" not in ct:
+                yield {"type": "log", "level": "error", "msg": "  ✗ respuesta HTML, no JSON"}
+                break
+            try:
+                posts = r.json()
+            except ValueError:
+                break
+
+            if total_pages is None:
+                total_pages = int(r.headers.get("X-WP-TotalPages", 1))
+                yield {"type": "total", "n": int(r.headers.get("X-WP-Total", 0))}
+
+            if not posts:
+                break
+
+            pairs = []
+            for post in posts:
+                url = post.get("link", "")
+                if not url:
+                    continue
+                author_name = ""
+                try:
+                    au = post.get("_embedded", {}).get("author", [])
+                    if au:
+                        author_name = au[0].get("name", "") or ""
+                except Exception:
+                    pass
+                pairs.append((url, author_name))
+
+            yield {"type": "page", "page": page, "total_pages": total_pages, "pairs": pairs}
+
+            if page >= total_pages:
+                break
+            page += 1

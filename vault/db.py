@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS articles (
     body_text   TEXT,
     section     TEXT,
     image_url   TEXT,
+    author      TEXT,
     scraped_at  TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_date   ON articles(date);
@@ -150,6 +151,11 @@ def init_db(source_id):
     if "image_local_path" not in cols:
         con.execute("ALTER TABLE articles ADD COLUMN image_local_path TEXT")
         con.execute("ALTER TABLE articles ADD COLUMN image_checked_at TEXT")
+    # Migration: author (2026-08-11) -- most WP sites expose the real byline
+    # via a structured user field the scraper never requested; NULL = not
+    # backfilled yet, '' = backfilled but the site has no author for this row.
+    if "author" not in cols:
+        con.execute("ALTER TABLE articles ADD COLUMN author TEXT")
     con.commit()
     con.close()
 
@@ -164,15 +170,15 @@ def insert_articles(source_id, articles):
     rows = [
         (a.get("source", source_id), a.get("date", ""), a.get("title", ""),
          a.get("url", ""), a.get("body_text", ""), a.get("section", ""),
-         a.get("image_url", ""), now)
+         a.get("image_url", ""), a.get("author", ""), now)
         for a in articles if a.get("url")
     ]
     con = connect(source_id)
     before = con.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
     con.executemany(
         "INSERT OR IGNORE INTO articles "
-        "(source, date, title, url, body_text, section, image_url, scraped_at) "
-        "VALUES (?,?,?,?,?,?,?,?)",
+        "(source, date, title, url, body_text, section, image_url, author, scraped_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
         rows,
     )
     con.commit()
@@ -258,6 +264,37 @@ def apply_repair_result(source_id, article_id, new_body_text, new_image_url):
     con.commit()
     con.close()
     return improved
+
+
+# ── author backfill (added 2026-08-11) ───────────────────────────────────────
+# WordPress exposes the real byline as a structured field (post.author ->
+# _embedded.author[0].name), separate from body content, that the scraper
+# never requested before. Existing rows predate that fix, so this sweeps
+# them via cheap listing pages (url + author only, no full re-fetch).
+
+def update_authors_bulk(source_id, url_author_pairs):
+    """url_author_pairs: iterable of (url, author_name). Updates author only
+    where it's currently empty/NULL, so a rerun is idempotent and cheap."""
+    if not url_author_pairs:
+        return 0
+    con = connect(source_id)
+    cur = con.executemany(
+        "UPDATE articles SET author = ? WHERE url = ? AND (author IS NULL OR author = '')",
+        [(author or "", url) for url, author in url_author_pairs],
+    )
+    con.commit()
+    updated = cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+    con.close()
+    return updated
+
+
+def count_missing_author(source_id):
+    con = connect(source_id)
+    n = con.execute(
+        "SELECT COUNT(*) FROM articles WHERE author IS NULL OR author = ''"
+    ).fetchone()[0]
+    con.close()
+    return n
 
 
 # ── image file backfill (added 2026-08-10) ───────────────────────────────────
@@ -412,7 +449,7 @@ def search_articles(source_id, query_str="", date_from="", date_to="", limit=25,
     con.row_factory = sqlite3.Row
 
     use_fts = bool(query_str)
-    cols = "id, source, date, title, url, body_text, section, image_url, image_local_path"
+    cols = "id, source, date, title, url, body_text, section, image_url, image_local_path, author"
     cols_a = ", ".join(f"a.{c}" for c in cols.split(", "))
     if use_fts:
         # Sorted by date below (like the no-query browse case), not FTS
@@ -490,7 +527,7 @@ def iter_matching_articles(source_id, query_str="", date_from="", date_to=""):
     d_to = date_to or "9999-12-31"
     con = connect(source_id)
     con.row_factory = sqlite3.Row
-    cols = "id, source, date, title, url, body_text, section, image_url"
+    cols = "id, source, date, title, url, body_text, section, image_url, author"
     cols_a = ", ".join(f"a.{c}" for c in cols.split(", "))
 
     if query_str:

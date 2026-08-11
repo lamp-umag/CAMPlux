@@ -228,7 +228,7 @@ async function toggleDetail(id, source) {
   box.innerHTML = `
     ${a.image_local_path ? `<img src="/api/image/${a.image_local_path}">` : ''}
     <div class="article-meta">
-      ${esc(a.section || '')} · ${esc(a.date)} ·
+      ${a.author ? esc(a.author) + ' · ' : ''}${esc(a.section || '')} · ${esc(a.date)} ·
       <a href="${esc(a.url)}" target="_blank" rel="noopener">ver original ↗</a>
     </div>
     <div class="body">${esc(a.body_text || '(sin texto)')}</div>

@@ -732,6 +732,69 @@ def images_backfill():
     )
 
 
+# ── author backfill (added 2026-08-11) ───────────────────────────────────────
+# Existing rows predate the fix that started requesting WordPress's own
+# author field (see scrapers/wordpress.py). No per-article re-fetch needed --
+# sweeps cheap listing pages (url + author only) and UPDATEs by url. Only
+# WordPress-based scrapers expose run_author_backfill().
+
+@app.route("/authors/backfill")
+def authors_backfill():
+    source_id = request.args.get("source")
+    if not source_id or source_id not in SOURCES:
+        return jsonify({"error": "Unknown source"}), 400
+
+    scraper = get_scraper(source_id)
+    if not scraper or not hasattr(scraper, "run_author_backfill"):
+        return jsonify({"error": f"'{source_id}' scraper has no run_author_backfill()"}), 400
+
+    db.init_db(source_id)
+
+    def generate():
+        if not scheduler_db.lock_acquire(source_id, holder="authors"):
+            held = scheduler_db.lock_status(source_id)
+            yield _sse({"type": "log", "level": "error",
+                        "msg": f"{source_id} is locked by "
+                               f"'{held and held['holder']}' right now -- try later"})
+            yield _sse({"type": "done", "checked": 0, "updated": 0, "remaining": None})
+            return
+        try:
+            missing_before = db.count_missing_author(source_id)
+            yield _sse({"type": "log", "level": "info",
+                        "msg": f"👤 Author backfill starting ({missing_before} missing)"})
+
+            checked, updated = 0, 0
+            for ev in scraper.run_author_backfill(delay=1.0):
+                if ev["type"] == "log":
+                    yield _sse(ev)
+                elif ev["type"] == "page":
+                    pairs = ev["pairs"]
+                    checked += len(pairs)
+                    updated += db.update_authors_bulk(source_id, pairs)
+                    yield _sse({
+                        "type": "progress", "checked": checked,
+                        "page": ev["page"], "total_pages": ev["total_pages"],
+                        "updated": updated,
+                    })
+
+            missing_after = db.count_missing_author(source_id)
+            yield _sse({
+                "type": "done", "checked": checked, "updated": updated,
+                "remaining": missing_after,
+            })
+            yield _sse({"type": "log", "level": "info",
+                        "msg": f"✓ Author backfill done: {updated} rows updated, "
+                               f"{missing_after} still missing"})
+        finally:
+            scheduler_db.lock_release(source_id)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 # ── explorer: simple search/browse UI (added 2026-08-11) ────────────────────
 
 @app.route("/explore")
@@ -811,7 +874,7 @@ def api_export_csv():
         # UTF-8 BOM -- without it, Excel on Windows guesses the system
         # codepage instead of UTF-8 and mangles the accented Spanish text.
         yield "﻿"
-        writer.writerow(["source_id", "source_name", "date", "title", "section", "url", "body_text"])
+        writer.writerow(["source_id", "source_name", "date", "title", "author", "section", "url", "body_text"])
         yield buf.getvalue()
         for sid in source_ids:
             for a in db.iter_matching_articles(sid, q, date_from, date_to):
@@ -819,6 +882,7 @@ def api_export_csv():
                 buf.truncate(0)
                 writer.writerow([_csv_field(a["source_id"]), _csv_field(a["source"]),
                                   _csv_field(a["date"]), _csv_field(a["title"]),
+                                  _csv_field(a.get("author", "")),
                                   _csv_field(a["section"]), _csv_field(a["url"]),
                                   _csv_field(a["body_text"])])
                 yield buf.getvalue()
