@@ -723,8 +723,8 @@ def explore():
 
 @app.route("/api/search")
 def api_search():
-    source_id = request.args.get("source")
-    if not source_id or source_id not in SOURCES:
+    source_id = request.args.get("source", "all")
+    if source_id != "all" and source_id not in SOURCES:
         return jsonify({"error": "Unknown source"}), 400
 
     q = request.args.get("q", "").strip()
@@ -734,7 +734,10 @@ def api_search():
     offset = max(int(request.args.get("offset", 0)), 0)
 
     try:
-        rows, total = db.search_articles(source_id, q, date_from, date_to, limit, offset)
+        if source_id == "all":
+            rows, total = db.search_all_sources(q, date_from, date_to, limit, offset)
+        else:
+            rows, total = db.search_articles(source_id, q, date_from, date_to, limit, offset)
     except Exception as e:
         # Most likely an invalid FTS5 query syntax (unbalanced quotes etc.)
         return jsonify({"error": f"Search error: {e}"}), 400
@@ -746,6 +749,40 @@ def api_search():
         del r["body_text"]
 
     return jsonify({"rows": rows, "total": total, "limit": limit, "offset": offset})
+
+
+@app.route("/api/export.csv")
+def api_export_csv():
+    source_id = request.args.get("source", "all")
+    if source_id != "all" and source_id not in SOURCES:
+        return jsonify({"error": "Unknown source"}), 400
+
+    q = request.args.get("q", "").strip()
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+    source_ids = list(SOURCES) if source_id == "all" else [source_id]
+
+    def generate():
+        import csv, io
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["source_id", "source_name", "date", "title", "section", "url", "body_text"])
+        yield buf.getvalue()
+        for sid in source_ids:
+            for a in db.iter_matching_articles(sid, q, date_from, date_to):
+                buf.seek(0)
+                buf.truncate(0)
+                writer.writerow([a["source_id"], a["source"], a["date"], a["title"],
+                                  a["section"], a["url"], a["body_text"]])
+                yield buf.getvalue()
+
+    fname_bit = source_id if source_id != "all" else "todas-las-fuentes"
+    filename = f"camplux_{fname_bit}_{datetime.date.today().isoformat()}.csv"
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @app.route("/api/article/<source_id>/<int:article_id>")

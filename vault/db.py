@@ -384,6 +384,10 @@ def get_update_start(source_id):
 def search_articles(source_id, query_str="", date_from="", date_to="", limit=25, offset=0):
     if not db_exists(source_id):
         return [], 0
+    # Older imported DBs (e.g. the pendrive backfill) predate the
+    # image_local_path/repair_checked_at column migrations -- run them
+    # before querying, same fix as the /repair route needed.
+    init_db(source_id)
     d_from = date_from or "0000-01-01"
     d_to = date_to or "9999-12-31"
     con = connect(source_id)
@@ -416,4 +420,71 @@ def search_articles(source_id, query_str="", date_from="", date_to="", limit=25,
         base + " ORDER BY a.date DESC LIMIT ? OFFSET ?", params + (limit, offset)
     ).fetchall()
     con.close()
-    return [dict(r) for r in rows], total
+    out = [dict(r) for r in rows]
+    for r in out:
+        r["source_id"] = source_id  # the internal key (e.g. "laprensaaustral"),
+                                     # distinct from r["source"] (display name)
+    return out, total
+
+
+def list_source_ids_with_data():
+    """Every source that actually has a DB file, discovered from disk rather
+    than a hardcoded list -- db.py doesn't otherwise know the full source
+    roster (that lives in app.py's SOURCES), and this keeps it that way."""
+    import glob
+    paths = glob.glob(os.path.join(DATA_DIR, "yene_*.db"))
+    return sorted(
+        os.path.basename(p)[len("yene_"):-len(".db")]
+        for p in paths
+        if not p.endswith(".bak")  # skip backup copies like the elpinguino pre-repair one
+    )
+
+
+def search_all_sources(query_str="", date_from="", date_to="", limit=25, offset=0):
+    """Fans out to every source's own DB and merges by date. Simple, not
+    maximally efficient (each source is queried for up to offset+limit rows
+    even though most of that gets discarded after the merge) -- fine at this
+    scale (a couple dozen local SQLite files), not built to paginate deep
+    into a huge merged result set quickly."""
+    need = offset + limit
+    total = 0
+    pooled = []
+    for source_id in list_source_ids_with_data():
+        rows, count = search_articles(source_id, query_str, date_from, date_to, limit=need, offset=0)
+        total += count
+        pooled.extend(rows)
+    pooled.sort(key=lambda r: r["date"], reverse=True)
+    return pooled[offset:offset + limit], total
+
+
+def iter_matching_articles(source_id, query_str="", date_from="", date_to=""):
+    """Generator over EVERY matching row (no limit) -- for CSV export, where
+    loading the whole result set into a list first (fetchall()) could mean
+    hundreds of MB for a big source like elpinguino. Iterating the cursor
+    directly stays lazy."""
+    if not db_exists(source_id):
+        return
+    init_db(source_id)
+    d_from = date_from or "0000-01-01"
+    d_to = date_to or "9999-12-31"
+    con = connect(source_id)
+    con.row_factory = sqlite3.Row
+    cols = "id, source, date, title, url, body_text, section, image_url"
+    cols_a = ", ".join(f"a.{c}" for c in cols.split(", "))
+
+    if query_str:
+        cur = con.execute(
+            f"SELECT {cols_a} FROM articles a JOIN articles_fts f ON a.id = f.rowid "
+            "WHERE articles_fts MATCH ? AND a.date BETWEEN ? AND ? ORDER BY a.date DESC",
+            (query_str, d_from, d_to),
+        )
+    else:
+        cur = con.execute(
+            f"SELECT {cols} FROM articles a WHERE a.date BETWEEN ? AND ? ORDER BY a.date DESC",
+            (d_from, d_to),
+        )
+    for row in cur:
+        d = dict(row)
+        d["source_id"] = source_id
+        yield d
+    con.close()

@@ -70,6 +70,7 @@
 
 <div class="toolbar">
   <select id="source">
+    <option value="all" selected>Todas las fuentes</option>
     {% for sid in sources %}
     <option value="{{ sid }}">{{ names.get(sid, sid) }}</option>
     {% endfor %}
@@ -80,14 +81,16 @@
   <input type="date" id="date_to">
   <button onclick="runSearch(true)">Buscar</button>
   <button class="ghost" onclick="clearFilters()">Limpiar</button>
+  <button class="ghost" onclick="downloadCsv()">⬇ Descargar CSV</button>
 </div>
 
 <main>
-  <div class="meta" id="resultMeta">Elige una fuente y busca.</div>
+  <div class="meta" id="resultMeta">Buscando en todas las fuentes…</div>
   <table>
     <thead><tr>
       <th style="width:52px"></th>
       <th style="width:100px">Fecha</th>
+      <th style="width:120px">Fuente</th>
       <th>Título</th>
     </tr></thead>
     <tbody id="resultsBody"></tbody>
@@ -101,6 +104,7 @@
 
 <script>
 const PAGE_SIZE = 25;
+const SOURCE_NAMES = {{ names | tojson }};
 let offset = 0;
 let lastTotal = 0;
 let openRowId = null;
@@ -144,38 +148,40 @@ async function runSearch(resetOffset) {
 
   lastTotal = data.total;
   resultMeta.textContent = `${data.total.toLocaleString('es-CL')} resultado(s)`;
-  renderRows(data.rows, source);
+  renderRows(data.rows);
   updatePager();
 }
 
-function renderRows(rows, source) {
+function renderRows(rows) {
   const body = document.getElementById('resultsBody');
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="3" style="color:var(--muted)">Sin resultados.</td></tr>';
+    body.innerHTML = '<tr><td colspan="4" style="color:var(--muted)">Sin resultados.</td></tr>';
     return;
   }
   body.innerHTML = rows.map(r => `
-    <tr class="result-row" onclick="toggleDetail(${r.id}, '${source}')">
+    <tr class="result-row" onclick="toggleDetail(${r.id}, '${r.source_id}')">
       <td class="thumb-col">
         ${r.image_local_path
           ? `<img src="/api/image/${r.image_local_path}" loading="lazy">`
           : '<div class="thumb-placeholder"></div>'}
       </td>
       <td class="date-col">${esc(r.date)}</td>
+      <td class="date-col">${esc(SOURCE_NAMES[r.source_id] || r.source_id)}</td>
       <td>
         <div class="title-col">${esc(r.title || '(sin título)')}</div>
         <div class="snippet">${esc(r.snippet)}${r.snippet && r.snippet.length >= 280 ? '…' : ''}</div>
       </td>
     </tr>
-    <tr id="detail-${r.id}"><td colspan="3"><div class="detail" id="detail-box-${r.id}"></div></td></tr>
+    <tr id="detail-${r.source_id}-${r.id}"><td colspan="4"><div class="detail" id="detail-box-${r.source_id}-${r.id}"></div></td></tr>
   `).join('');
 }
 
 async function toggleDetail(id, source) {
-  const box = document.getElementById(`detail-box-${id}`);
+  const key = `${source}-${id}`;
+  const box = document.getElementById(`detail-box-${key}`);
   if (!box) return;
 
-  if (openRowId !== null && openRowId !== id) {
+  if (openRowId !== null && openRowId !== key) {
     const prev = document.getElementById(`detail-box-${openRowId}`);
     if (prev) prev.classList.remove('open');
   }
@@ -188,7 +194,7 @@ async function toggleDetail(id, source) {
 
   box.innerHTML = '<div style="color:var(--muted)">Cargando…</div>';
   box.classList.add('open');
-  openRowId = id;
+  openRowId = key;
 
   const res = await fetch(`/api/article/${source}/${id}`);
   const a = await res.json();
@@ -221,6 +227,20 @@ function prevPage() {
 function nextPage() {
   offset = offset + PAGE_SIZE;
   runSearch(false);
+}
+
+function downloadCsv() {
+  const source = document.getElementById('source').value;
+  const q = document.getElementById('q').value.trim();
+  const date_from = document.getElementById('date_from').value;
+  const date_to = document.getElementById('date_to').value;
+
+  const params = new URLSearchParams({ source });
+  if (q) params.set('q', q);
+  if (date_from) params.set('date_from', date_from);
+  if (date_to) params.set('date_to', date_to);
+
+  window.location.href = '/api/export.csv?' + params.toString();
 }
 
 document.getElementById('q').addEventListener('keydown', e => {
