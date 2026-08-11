@@ -127,6 +127,31 @@
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── mobile (<=768px): stack the two-column layout, roomier tap targets ── */
+  @media (max-width: 768px) {
+    header { flex-wrap: wrap; padding: 14px 16px 12px; gap: 6px 14px; }
+    header a { margin-left: 0 !important; order: 3; flex-basis: 100%; }
+
+    .layout { grid-template-columns: 1fr; height: auto; }
+
+    .group-tabs { margin: 10px 12px 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .group-tab { flex: none; padding: 8px 12px; }
+
+    .cards-pane { padding: 12px; max-height: 60vh; }
+
+    .log-pane { border-left: none; border-top: 1px solid var(--border); padding: 14px 16px; }
+    #log { max-height: 40vh; }
+
+    .card-top { grid-template-columns: 1fr; }
+    .card-actions { align-items: stretch; flex-direction: row; flex-wrap: wrap; margin-top: 8px; }
+    .card-actions .btn, .card-actions .nightly-toggle { flex: none; }
+    .btn { padding: 8px 13px; font-size: 12px; }
+
+    .schedule-form { width: 100%; }
+    .schedule-form input, .schedule-form select { flex: 1 1 auto; min-width: 0; }
+    .schedule-form input[type="datetime-local"] { flex-basis: 100%; }
+  }
 </style>
 </head>
 <body>
