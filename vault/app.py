@@ -1,7 +1,9 @@
+import concurrent.futures as cf
 import json
 import datetime
 import logging
 import os
+import re
 import uuid
 from logging.handlers import RotatingFileHandler
 from flask import Flask, Response, jsonify, render_template, request
@@ -593,6 +595,7 @@ REPAIRABLE_SOURCES = {"elpinguino"}
 def repair():
     source_id = request.args.get("source")
     limit = int(request.args.get("limit", 200))
+    section = request.args.get("section", "").strip() or None
 
     if source_id not in REPAIRABLE_SOURCES:
         return jsonify({"error": f"'{source_id}' doesn't support /repair "
@@ -613,34 +616,45 @@ def repair():
             yield _sse({"type": "done", "checked": 0, "improved": 0, "remaining": None})
             return
         try:
-            batch = db.get_unrepaired_short_articles(source_id, limit=limit)
-            remaining_before = db.count_unrepaired_short(source_id)
+            batch = db.get_unrepaired_short_articles(source_id, limit=limit, section=section)
+            remaining_before = db.count_unrepaired_short(source_id, section=section)
+            scope = f" (section={section})" if section else ""
             yield _sse({"type": "log", "level": "info",
-                        "msg": f"🔧 Repair batch: {len(batch)} articles "
-                               f"({remaining_before} total still unrepaired)"})
+                        "msg": f"🔧 Repair batch{scope}: {len(batch)} articles "
+                               f"({remaining_before} total still unrepaired{scope})"})
 
+            # Same bounded-thread-pool pattern as elpinguino's bulk fetch --
+            # single-URL fetches through the scraper's own shared session,
+            # already measured safe at this worker count (see BULK_WORKERS).
+            workers = getattr(scraper, "BULK_WORKERS", 1)
             checked, improved = 0, 0
-            for art in batch:
-                result = scraper._fetch_body(art["url"], delay=1.5)
-                new_body = result[3] if result else ""
-                new_image = result[4] if result else ""
-                did_improve = db.apply_repair_result(source_id, art["id"], new_body, new_image)
-                checked += 1
-                if did_improve:
-                    improved += 1
-                yield _sse({
-                    "type": "progress", "checked": checked, "total": len(batch),
-                    "improved": improved, "url": art["url"],
-                })
+            with cf.ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {
+                    pool.submit(scraper._fetch_body, art["url"], 1.5): art
+                    for art in batch
+                }
+                for fut in cf.as_completed(futures):
+                    art = futures[fut]
+                    result = fut.result()
+                    new_body = result[3] if result else ""
+                    new_image = result[4] if result else ""
+                    did_improve = db.apply_repair_result(source_id, art["id"], new_body, new_image)
+                    checked += 1
+                    if did_improve:
+                        improved += 1
+                    yield _sse({
+                        "type": "progress", "checked": checked, "total": len(batch),
+                        "improved": improved, "url": art["url"],
+                    })
 
-            remaining_after = db.count_unrepaired_short(source_id)
+            remaining_after = db.count_unrepaired_short(source_id, section=section)
             yield _sse({
                 "type": "done", "checked": checked, "improved": improved,
                 "remaining": remaining_after,
             })
             yield _sse({"type": "log", "level": "info",
                         "msg": f"✓ Repair batch done: {improved}/{checked} improved, "
-                               f"{remaining_after} still left"})
+                               f"{remaining_after} still left{scope}"})
         finally:
             scheduler_db.lock_release(source_id)
 
@@ -751,6 +765,23 @@ def api_search():
     return jsonify({"rows": rows, "total": total, "limit": limit, "offset": offset})
 
 
+# CSV cells that are bulletproof against weak/non-RFC4180 readers: no embedded
+# newlines (elpinguino's body_text can carry raw newlines -- its own extraction
+# doesn't collapse whitespace the way the shared WordPress-scraper path does),
+# no control characters (stray NULs etc. from bad scrapes truncate a cell in
+# some readers), and no leading =/+/-/@ (Excel/Sheets formula injection).
+_CSV_FORMULA_LEADCHARS = ("=", "+", "-", "@")
+
+
+def _csv_field(val):
+    s = "" if val is None else str(val)
+    s = re.sub(r"\s+", " ", s).strip()
+    s = "".join(c for c in s if c == " " or ord(c) >= 32)
+    if s[:1] in _CSV_FORMULA_LEADCHARS:
+        s = " " + s
+    return s
+
+
 @app.route("/api/export.csv")
 def api_export_csv():
     source_id = request.args.get("source", "all")
@@ -765,22 +796,31 @@ def api_export_csv():
     def generate():
         import csv, io
         buf = io.StringIO()
-        writer = csv.writer(buf)
+        # QUOTE_ALL: every field gets wrapped in quotes regardless of content,
+        # so even a naive/non-RFC4180 CSV reader has an unambiguous field
+        # boundary to look for instead of relying on it correctly tracking
+        # quote state across an embedded comma or newline.
+        writer = csv.writer(buf, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
+        # UTF-8 BOM -- without it, Excel on Windows guesses the system
+        # codepage instead of UTF-8 and mangles the accented Spanish text.
+        yield "﻿"
         writer.writerow(["source_id", "source_name", "date", "title", "section", "url", "body_text"])
         yield buf.getvalue()
         for sid in source_ids:
             for a in db.iter_matching_articles(sid, q, date_from, date_to):
                 buf.seek(0)
                 buf.truncate(0)
-                writer.writerow([a["source_id"], a["source"], a["date"], a["title"],
-                                  a["section"], a["url"], a["body_text"]])
+                writer.writerow([_csv_field(a["source_id"]), _csv_field(a["source"]),
+                                  _csv_field(a["date"]), _csv_field(a["title"]),
+                                  _csv_field(a["section"]), _csv_field(a["url"]),
+                                  _csv_field(a["body_text"])])
                 yield buf.getvalue()
 
     fname_bit = source_id if source_id != "all" else "todas-las-fuentes"
     filename = f"camplux_{fname_bit}_{datetime.date.today().isoformat()}.csv"
     return Response(
         stream_with_context(generate()),
-        mimetype="text/csv",
+        mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 

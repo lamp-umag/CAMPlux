@@ -191,26 +191,44 @@ def insert_articles(source_id, articles):
 MIN_PLAUSIBLE_BODY_CHARS = 150
 
 
-def count_unrepaired_short(source_id):
+def count_unrepaired_short(source_id, section=None):
     con = connect(source_id)
-    n = con.execute(
-        "SELECT COUNT(*) FROM articles "
-        "WHERE LENGTH(body_text) < ? AND repair_checked_at IS NULL",
-        (MIN_PLAUSIBLE_BODY_CHARS,),
-    ).fetchone()[0]
+    if section:
+        n = con.execute(
+            "SELECT COUNT(*) FROM articles "
+            "WHERE LENGTH(body_text) < ? AND repair_checked_at IS NULL AND section = ?",
+            (MIN_PLAUSIBLE_BODY_CHARS, section),
+        ).fetchone()[0]
+    else:
+        n = con.execute(
+            "SELECT COUNT(*) FROM articles "
+            "WHERE LENGTH(body_text) < ? AND repair_checked_at IS NULL",
+            (MIN_PLAUSIBLE_BODY_CHARS,),
+        ).fetchone()[0]
     con.close()
     return n
 
 
-def get_unrepaired_short_articles(source_id, limit=200):
+def get_unrepaired_short_articles(source_id, limit=200, section=None):
+    """section lets a repair pass subset the queue (e.g. "opinion") instead
+    of working through the whole backlog in insertion order -- economical
+    when a specific slice is known to need attention."""
     con = connect(source_id)
     con.row_factory = sqlite3.Row
-    rows = con.execute(
-        "SELECT id, url, date, body_text FROM articles "
-        "WHERE LENGTH(body_text) < ? AND repair_checked_at IS NULL "
-        "ORDER BY date DESC LIMIT ?",
-        (MIN_PLAUSIBLE_BODY_CHARS, limit),
-    ).fetchall()
+    if section:
+        rows = con.execute(
+            "SELECT id, url, date, body_text FROM articles "
+            "WHERE LENGTH(body_text) < ? AND repair_checked_at IS NULL AND section = ? "
+            "ORDER BY date DESC LIMIT ?",
+            (MIN_PLAUSIBLE_BODY_CHARS, section, limit),
+        ).fetchall()
+    else:
+        rows = con.execute(
+            "SELECT id, url, date, body_text FROM articles "
+            "WHERE LENGTH(body_text) < ? AND repair_checked_at IS NULL "
+            "ORDER BY date DESC LIMIT ?",
+            (MIN_PLAUSIBLE_BODY_CHARS, limit),
+        ).fetchall()
     con.close()
     return [dict(r) for r in rows]
 
