@@ -96,6 +96,9 @@
     {% endfor %}
   </select>
   <input type="text" id="q" placeholder="Buscar texto (opcional)…">
+  <label style="display:flex; align-items:center; gap:4px; color:var(--muted); font-size:13px; white-space:nowrap;">
+    <input type="checkbox" id="title_only"> Solo en título
+  </label>
   <input type="date" id="date_from">
   <span style="color:var(--muted)">→</span>
   <input type="date" id="date_to">
@@ -137,6 +140,7 @@ function esc(s) {
 
 function clearFilters() {
   document.getElementById('q').value = '';
+  document.getElementById('title_only').checked = false;
   document.getElementById('date_from').value = '';
   document.getElementById('date_to').value = '';
   runSearch(true);
@@ -146,11 +150,13 @@ async function runSearch(resetOffset) {
   if (resetOffset) offset = 0;
   const source = document.getElementById('source').value;
   const q = document.getElementById('q').value.trim();
+  const title_only = document.getElementById('title_only').checked;
   const date_from = document.getElementById('date_from').value;
   const date_to = document.getElementById('date_to').value;
 
   const params = new URLSearchParams({ source, limit: PAGE_SIZE, offset });
   if (q) params.set('q', q);
+  if (q && title_only) params.set('title_only', '1');
   if (date_from) params.set('date_from', date_from);
   if (date_to) params.set('date_to', date_to);
 
@@ -254,11 +260,13 @@ function nextPage() {
 function downloadCsv() {
   const source = document.getElementById('source').value;
   const q = document.getElementById('q').value.trim();
+  const title_only = document.getElementById('title_only').checked;
   const date_from = document.getElementById('date_from').value;
   const date_to = document.getElementById('date_to').value;
 
   const params = new URLSearchParams({ source });
   if (q) params.set('q', q);
+  if (q && title_only) params.set('title_only', '1');
   if (date_from) params.set('date_from', date_from);
   if (date_to) params.set('date_to', date_to);
 
@@ -269,6 +277,7 @@ document.getElementById('q').addEventListener('keydown', e => {
   if (e.key === 'Enter') runSearch(true);
 });
 document.getElementById('source').addEventListener('change', () => runSearch(true));
+document.getElementById('title_only').addEventListener('change', () => runSearch(true));
 
 runSearch(true);
 </script>

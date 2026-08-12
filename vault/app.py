@@ -804,6 +804,15 @@ def explore():
     )
 
 
+def _fts_query(q, title_only):
+    """FTS5 column filter -- restricts the match to the title column instead
+    of title+body_text. Parenthesized so multi-word/phrase queries stay
+    grouped under the filter instead of only the first term being scoped."""
+    if q and title_only:
+        return f"title:({q})"
+    return q
+
+
 @app.route("/api/search")
 def api_search():
     source_id = request.args.get("source", "all")
@@ -811,6 +820,8 @@ def api_search():
         return jsonify({"error": "Unknown source"}), 400
 
     q = request.args.get("q", "").strip()
+    title_only = request.args.get("title_only", "").lower() in ("1", "true", "on")
+    q = _fts_query(q, title_only)
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
     limit = min(int(request.args.get("limit", 25)), 100)
@@ -859,6 +870,8 @@ def api_export_csv():
         return jsonify({"error": "Unknown source"}), 400
 
     q = request.args.get("q", "").strip()
+    title_only = request.args.get("title_only", "").lower() in ("1", "true", "on")
+    q = _fts_query(q, title_only)
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
     source_ids = list(EXPLORE_SOURCES) if source_id == "all" else [source_id]
