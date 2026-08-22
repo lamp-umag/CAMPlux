@@ -101,10 +101,41 @@
     background: var(--surface2); border: 1px solid var(--border); color: var(--text);
     border-radius: 7px; padding: 6px 8px; color-scheme: dark; font-size: 13px;
   }
-  select.region-select {
-    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
-    border-radius: 7px; padding: 6px 8px; font-size: 13px; max-width: 100%;
+  /* multi-select source filter (region-checkbox panel) */
+  .source-select-wrap { position: relative; width: 100%; }
+  .source-select-btn {
+    width: 100%; text-align: left; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 7px; padding: 7px 10px; font-size: 13px;
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
   }
+  .source-select-btn .car { color: var(--muted2); font-size: 10px; }
+  .source-select-panel {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    max-height: 340px; overflow-y: auto; padding: 6px; box-shadow: 0 12px 28px rgba(0,0,0,.45);
+  }
+  .source-select-panel.open { display: block; }
+  .ssp-all {
+    display: flex; align-items: center; gap: 8px; padding: 8px 8px; font-size: 13px; font-weight: 600;
+    border-bottom: 1px solid var(--border); margin-bottom: 4px; cursor: pointer;
+  }
+  .ssp-region { border-radius: 8px; }
+  .ssp-region-row {
+    display: flex; align-items: center; gap: 8px; padding: 7px 8px; font-size: 13px; cursor: pointer;
+  }
+  .ssp-region-row:hover { background: var(--surface2); }
+  .ssp-region-row .rlabel { flex: 1; font-weight: 600; }
+  .ssp-region-row .rn { font-size: 11px; color: var(--muted2); }
+  .ssp-chevron { color: var(--muted2); font-size: 10px; transition: transform .15s; padding: 4px; }
+  .ssp-region.open .ssp-chevron { transform: rotate(90deg); }
+  .ssp-sources { display: none; padding-left: 26px; }
+  .ssp-region.open .ssp-sources { display: block; }
+  .ssp-source-row {
+    display: flex; align-items: center; gap: 8px; padding: 5px 8px; font-size: 12.5px;
+    color: var(--muted); cursor: pointer;
+  }
+  .ssp-source-row:hover { color: var(--text); }
+  .ssp-source-row input, .ssp-region-row input, .ssp-all input { accent-color: var(--accent); width: 16px; height: 16px; flex-shrink: 0; }
 
   .result-meta { font-size: 12.5px; color: var(--muted); margin: 4px 2px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .result-meta .export-link { color: var(--accent); font-weight: 600; white-space: nowrap; }
@@ -168,11 +199,9 @@
   .region-body { display: none; padding: 0 14px 12px; }
   .region-group.open .region-body { display: block; }
 
-  .source-row {
-    display: flex; align-items: center; gap: 10px; padding: 9px 0;
-    border-top: 1px solid var(--border);
-  }
-  .source-row:first-child { border-top: none; }
+  .source-row-wrap { border-top: 1px solid var(--border); }
+  .source-row-wrap:first-child { border-top: none; }
+  .source-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; }
   .health-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .health-dot.g { background: var(--ok); box-shadow: 0 0 6px rgba(63,191,127,.5); }
   .health-dot.y { background: var(--warn); }
@@ -180,6 +209,22 @@
   .source-info { flex: 1; min-width: 0; cursor: pointer; }
   .source-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
   .source-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+  .source-expand-btn {
+    background: transparent; border: none; color: var(--muted2); font-size: 11px;
+    padding: 6px; flex-shrink: 0; transition: transform .15s;
+  }
+  .source-row-wrap.open .source-expand-btn { transform: rotate(90deg); }
+  .source-detail {
+    display: none; padding: 2px 0 12px 18px; font-size: 12px; color: var(--muted);
+  }
+  .source-row-wrap.open .source-detail { display: block; }
+  .source-detail .sd-line { margin-bottom: 5px; }
+  .source-detail .sd-line b { color: var(--text); font-weight: 600; }
+  .coverage-bars { display: flex; align-items: flex-end; gap: 2px; height: 34px; margin-top: 6px; }
+  .coverage-bars .cbar { flex: 1; background: var(--accent-dim); border-radius: 2px 2px 0 0; min-height: 2px; position: relative; }
+  .coverage-bars .cbar.zero { background: var(--surface3); }
+  .coverage-labels { display: flex; gap: 2px; margin-top: 2px; }
+  .coverage-labels span { flex: 1; font-size: 9px; text-align: center; color: var(--muted2); overflow: hidden; }
 
   /* toggle switch */
   .switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
@@ -211,9 +256,55 @@
 
   .loading-msg { text-align: center; padding: 40px 10px; color: var(--muted); font-size: 13.5px; }
 
+  /* ── jobs tab ─────────────────────────────────────────────────────────── */
+  .job-section { margin-bottom: 20px; }
+  .job-section h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+    margin: 0 0 8px; font-weight: 700;
+  }
+  .job-row {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 12px; margin-bottom: 6px; font-size: 13px;
+  }
+  .job-row.running { border-color: var(--ok); }
+  .job-row.stale { border-color: var(--warn); }
+  .job-row .jr-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .job-row .jr-name { font-weight: 650; }
+  .job-row .jr-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .live-pulse {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+    margin-right: 5px; animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+  .run-outcome { display: flex; gap: 10px; font-size: 11.5px; margin-top: 4px; }
+  .run-outcome .ro-ok { color: var(--ok); }
+  .run-outcome .ro-err { color: var(--err); }
+  .run-outcome .ro-muted { color: var(--muted2); }
+
+  .trigger-form { display: flex; flex-direction: column; gap: 8px; }
+  .trigger-form .tf-row { display: flex; gap: 8px; }
+  .trigger-form select, .trigger-form input[type="text"] {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 7px; padding: 8px 9px; font-size: 13px; flex: 1; min-width: 0;
+  }
+  .trigger-form button {
+    background: var(--accent); border: none; color: #fff; font-weight: 600;
+    border-radius: 7px; padding: 8px 16px; font-size: 13px;
+  }
+  .trigger-form button:disabled { background: var(--surface3); color: var(--muted); }
+  .progress-log {
+    display: none; margin-top: 10px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 12px; font-size: 12px; font-family: ui-monospace, monospace;
+    max-height: 200px; overflow-y: auto; color: var(--muted);
+  }
+  .progress-log.open { display: block; }
+  .progress-log .pl-line { margin-bottom: 3px; }
+  .progress-log .pl-done { color: var(--ok); font-weight: 700; }
+  .progress-log .pl-err { color: var(--err); }
+
   @media (min-width: 640px) {
     body { font-size: 15px; }
-    .filters-panel input[type="date"], select.region-select { font-size: 13px; }
+    .filters-panel input[type="date"] { font-size: 13px; }
   }
 </style>
 </head>
@@ -228,6 +319,7 @@
     <nav class="tabs">
       <button data-tab="explore" class="active">🔍 Explorar</button>
       <button data-tab="sources">📡 Fuentes</button>
+      <button data-tab="jobs">⚙ Trabajos</button>
     </nav>
   </header>
 
@@ -243,7 +335,12 @@
           <label><input type="checkbox" id="titleOnly"> Solo en título</label>
           <label>Desde <input type="date" id="dateFrom"></label>
           <label>Hasta <input type="date" id="dateTo"></label>
-          <select class="region-select" id="regionFilter"><option value="all">Todas las regiones</option></select>
+          <div class="source-select-wrap">
+            <button class="source-select-btn" type="button" id="sourceSelectBtn">
+              <span id="sourceSelectLabel">Todas las fuentes</span><span class="car">▾</span>
+            </button>
+            <div class="source-select-panel" id="sourceSelectPanel"></div>
+          </div>
         </div>
       </div>
       <div class="result-meta">
@@ -268,6 +365,39 @@
         <summary>Fuentes descartadas <span id="disabledCount"></span></summary>
         <div id="disabledList"></div>
       </details>
+    </section>
+
+    <!-- ══════════════ JOBS TAB ══════════════ -->
+    <section class="view" id="view-jobs">
+      <div class="job-section">
+        <h2>Corriendo ahora mismo</h2>
+        <div id="runningJobs"><div class="loading-msg">Consultando…</div></div>
+      </div>
+
+      <div class="job-section">
+        <h2>Actualizar una fuente manualmente</h2>
+        <div class="trigger-form">
+          <div class="tf-row">
+            <select id="triggerSource"></select>
+            <select id="triggerMode">
+              <option value="update">Incremental (update)</option>
+              <option value="full">Completo (full — histórico)</option>
+            </select>
+          </div>
+          <button id="triggerBtn" type="button">▶ Iniciar</button>
+          <div class="progress-log" id="triggerLog"></div>
+        </div>
+      </div>
+
+      <div class="job-section">
+        <h2>Programadas (pendientes)</h2>
+        <div id="pendingJobs"></div>
+      </div>
+
+      <div class="job-section">
+        <h2>Historial nocturno</h2>
+        <div id="nightlyHistory"></div>
+      </div>
     </section>
   </main>
 
@@ -314,10 +444,16 @@ const REGION_META = {
 // vague "Otras regiones" heading. Cosmetic only, doesn't touch the server.
 const REASSIGN_TO_REGION = { ladiscusion: 'nuble' };
 
-let STATUS = {}, GROUPS = {}, DISABLED = {}, NIGHTLY = {};
+let STATUS = {}, GROUPS = {}, DISABLED = {}, NIGHTLY = {}, LABELS = {};
 let searchOffset = 0, searchTotal = 0;
 const PAGE_SIZE = 20;
 let openDetailKey = null;
+// null = no filter ("all"). Once the user touches any checkbox this becomes
+// a real Set of source_ids, even if that ends up matching every source --
+// distinguishing "explicitly everything" from "never touched" isn't needed
+// here, both search the same way.
+let selectedSources = null;
+let jobsPollTimer = null;
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = sel => document.querySelector(sel);
@@ -337,42 +473,63 @@ function healthClass(source) {
   return 'r';
 }
 
+// "hace 5 horas" / "hace 2 días" -- hours only under 24h, days from then on,
+// never finer than that (no minutes) per how this is meant to be read: a
+// rough freshness signal, not a precise timestamp.
+function relativeTime(isoStr) {
+  if (!isoStr) return 'nunca';
+  const then = new Date(isoStr);
+  if (isNaN(then)) return 'nunca';
+  const hours = (Date.now() - then.getTime()) / 3600000;
+  if (hours < 1) return 'hace menos de 1 hora';
+  if (hours < 24) return `hace ${hours.toFixed(1)} horas`;
+  return `hace ${(hours / 24).toFixed(1)} días`;
+}
+
 // ── tabs ─────────────────────────────────────────────────────────────────
-$$('.tabs button').forEach(btn => btn.addEventListener('click', () => {
-  $$('.tabs button').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  $$('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById('view-' + btn.dataset.tab).classList.add('active');
-  localStorage.setItem('camplux2_tab', btn.dataset.tab);
-}));
+function activateTab(tabName) {
+  $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+  $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + tabName));
+  localStorage.setItem('camplux2_tab', tabName);
+  if (tabName === 'jobs') {
+    renderRunningJobs();
+    if (!jobsPollTimer) jobsPollTimer = setInterval(renderRunningJobs, 8000);
+  } else if (jobsPollTimer) {
+    clearInterval(jobsPollTimer);
+    jobsPollTimer = null;
+  }
+}
+$$('.tabs button').forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
 
 // ── boot ─────────────────────────────────────────────────────────────────
 async function boot() {
+  let sched;
   try {
-    const [statusRes, groupsRes, scheduleRes] = await Promise.all([
-      fetch('/status'), fetch('/source_groups'), fetch('/schedule/state'),
+    const [statusRes, groupsRes, scheduleRes, namesRes] = await Promise.all([
+      fetch('/status'), fetch('/source_groups'), fetch('/schedule/state'), fetch('/source_names'),
     ]);
     STATUS = await statusRes.json();
     const g = await groupsRes.json();
     GROUPS = g.groups || {};
     DISABLED = g.disabled || {};
-    const sched = await scheduleRes.json();
+    sched = await scheduleRes.json();
     NIGHTLY = sched.nightly_enabled || {};
+    LABELS = await namesRes.json();
   } catch (e) {
     $('#statsLine').textContent = 'error de conexión';
     return;
   }
 
   renderStats();
-  renderRegionSelect();
+  renderSourceSelectPanel();
   renderSources();
   renderDisabled();
+  renderTriggerSourceOptions();
+  renderPendingJobs(sched.pending || []);
+  renderNightlyHistory(sched.nightly_runs || []);
 
-  const savedTab = localStorage.getItem('camplux2_tab');
-  if (savedTab === 'sources') {
-    $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === 'sources'));
-    $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-sources'));
-  }
+  const savedTab = localStorage.getItem('camplux2_tab') || 'explore';
+  activateTab(savedTab);
 
   runSearch(true);
 }
@@ -444,35 +601,59 @@ function renderSources() {
     const body = el.querySelector('.region-body');
     for (const sid of info.sources) {
       const s = STATUS[sid] || {};
-      const name = (window.SOURCE_LABELS && window.SOURCE_LABELS[sid]) || sid;
+      const name = LABELS[sid] || sid;
       const enabled = NIGHTLY[sid] !== false;
-      const row = document.createElement('div');
-      row.className = 'source-row';
-      row.dataset.sid = sid;
-      const countTxt = s.exists ? `${(s.count || 0).toLocaleString('es-CL')} arts.` : 'sin datos';
-      const dateTxt = s.max_date ? `· últ. ${s.max_date}` : '';
-      row.innerHTML = `
-        <span class="health-dot ${healthClass(s)}"></span>
-        <div class="source-info" data-jump="${esc(sid)}">
-          <div class="source-name">${esc(name)}</div>
-          <div class="source-sub">${countTxt} ${dateTxt}</div>
+      const wrap = document.createElement('div');
+      wrap.className = 'source-row-wrap';
+      wrap.dataset.sid = sid;
+      const countTxt = s.exists ? `${(s.count || 0).toLocaleString('es-CL')} artículos` : 'sin datos';
+      const freshTxt = s.exists ? relativeTime(s.last_scraped) : '';
+      wrap.innerHTML = `
+        <div class="source-row">
+          <span class="health-dot ${healthClass(s)}"></span>
+          <div class="source-info" data-jump="${esc(sid)}">
+            <div class="source-name">${esc(name)}</div>
+            <div class="source-sub">${countTxt}${freshTxt ? ' · ' + freshTxt : ''}</div>
+          </div>
+          <button class="source-expand-btn" type="button" data-toggle-detail="${esc(sid)}">▶</button>
+          <label class="switch">
+            <input type="checkbox" ${enabled ? 'checked' : ''} data-toggle="${esc(sid)}">
+            <span class="track"><span class="thumb"></span></span>
+          </label>
         </div>
-        <label class="switch">
-          <input type="checkbox" ${enabled ? 'checked' : ''} data-toggle="${esc(sid)}">
-          <span class="track"><span class="thumb"></span></span>
-        </label>`;
-      body.appendChild(row);
+        <div class="source-detail" data-detail-for="${esc(sid)}"></div>`;
+      body.appendChild(wrap);
     }
     container.appendChild(el);
   }
+}
 
-  // region names aren't known client-side until the first /status render
-  // populates window.SOURCE_LABELS from /source_groups' sibling data --
-  // simplest: derive labels straight from STATUS's own keys isn't enough
-  // (no display name there), so pull them from the classic dashboard's
-  // known mapping via a tiny inline fetch-free trick: use sid itself if
-  // no better name is cached. Good enough as a fallback; most users will
-  // recognize the slug.
+// Expandable per-source detail (date range + per-year coverage) -- kept
+// out of the default row on purpose (rendering this for all ~110 sources
+// up front is unnecessary DOM weight for something most people won't open
+// most of the time); computed from data already in STATUS, no extra fetch.
+function renderSourceDetail(sid) {
+  const s = STATUS[sid] || {};
+  const box = document.querySelector(`.source-detail[data-detail-for="${sid}"]`);
+  if (!box) return;
+  if (!s.exists) { box.innerHTML = '<div class="sd-line">Sin datos todavía.</div>'; return; }
+
+  const years = Object.keys(s.coverage || {}).sort();
+  const maxN = Math.max(1, ...years.map(y => s.coverage[y]));
+  const bars = years.map(y => {
+    const n = s.coverage[y];
+    const h = Math.round((n / maxN) * 32) || 2;
+    return `<div class="cbar${n ? '' : ' zero'}" style="height:${h}px" title="${y}: ${n.toLocaleString('es-CL')}"></div>`;
+  }).join('');
+  const labels = years.map(y => `<span>${y.slice(2)}</span>`).join('');
+
+  box.innerHTML = `
+    <div class="sd-line"><b>Rango de fechas:</b> ${esc(s.min_date || '?')} → ${esc(s.max_date || '?')}</div>
+    <div class="sd-line"><b>Inicio de archivo esperado:</b> ${esc(s.archive_start || '?')}</div>
+    <div class="sd-line"><b>Tamaño en disco:</b> ${s.size_mb ?? '?'} MB</div>
+    ${years.length ? `<div class="sd-line"><b>Cobertura por año:</b></div>
+      <div class="coverage-bars">${bars}</div>
+      <div class="coverage-labels">${labels}</div>` : ''}`;
 }
 
 container_click_delegate();
@@ -489,11 +670,20 @@ function container_click_delegate() {
     const jump = e.target.closest('[data-jump]');
     if (jump) {
       const sid = jump.dataset.jump;
-      $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === 'explore'));
-      $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-explore'));
-      $('#regionFilter').value = sid;
+      activateTab('explore');
+      selectedSources = new Set([sid]);
+      updateSourceSelectLabel();
       $('#q').value = '';
       runSearch(true);
+      return;
+    }
+    const expandBtn = e.target.closest('[data-toggle-detail]');
+    if (expandBtn) {
+      const sid = expandBtn.dataset.toggleDetail;
+      const wrap = expandBtn.closest('.source-row-wrap');
+      const wasOpen = wrap.classList.contains('open');
+      wrap.classList.toggle('open');
+      if (!wasOpen) renderSourceDetail(sid);
       return;
     }
   });
@@ -547,27 +737,114 @@ function renderDisabled() {
     </div>`).join('') || '<div class="disabled-row">Ninguna.</div>';
 }
 
-// ── explore tab ──────────────────────────────────────────────────────────
-function renderRegionSelect() {
-  const sel = $('#regionFilter');
+// ── explore tab: multi-select source filter (checkbox by region, expands
+// to individual sources) ────────────────────────────────────────────────
+function regionOrder() {
   const groups = buildEffectiveGroups();
-  const order = Object.keys(groups).sort((a, b) => {
+  return Object.keys(groups).sort((a, b) => {
     const ra = (REGION_META[a] || {}).rank ?? 50;
     const rb = (REGION_META[b] || {}).rank ?? 50;
-    return ra - rb;
-  });
-  for (const gkey of order) {
-    const info = groups[gkey];
+    if (ra !== rb) return ra - rb;
+    return a.localeCompare(b);
+  }).map(gkey => [gkey, groups[gkey]]);
+}
+
+function renderSourceSelectPanel() {
+  const panel = $('#sourceSelectPanel');
+  let html = `<label class="ssp-all"><input type="checkbox" id="sspAllCheckbox" checked> Todas las fuentes</label>`;
+  for (const [gkey, info] of regionOrder()) {
+    if (!info.sources.length) continue;
     const meta = REGION_META[gkey] || {};
     const label = meta.label || info.label || gkey;
+    html += `
+      <div class="ssp-region" data-region="${esc(gkey)}">
+        <div class="ssp-region-row">
+          <input type="checkbox" checked data-ssp-region="${esc(gkey)}">
+          <span class="rlabel">${esc(label)}</span>
+          <span class="rn">${info.sources.length}</span>
+          <span class="ssp-chevron" data-ssp-expand="${esc(gkey)}">▶</span>
+        </div>
+        <div class="ssp-sources">
+          ${info.sources.map(sid => `
+            <label class="ssp-source-row">
+              <input type="checkbox" checked data-ssp-source="${esc(sid)}" data-ssp-region-of="${esc(gkey)}">
+              ${esc(LABELS[sid] || sid)}
+            </label>`).join('')}
+        </div>
+      </div>`;
+  }
+  panel.innerHTML = html;
+}
+
+function updateSourceSelectLabel() {
+  const label = $('#sourceSelectLabel');
+  if (selectedSources === null) { label.textContent = 'Todas las fuentes'; return; }
+  const all = regionOrder().flatMap(([, info]) => info.sources);
+  if (selectedSources.size === 0 || selectedSources.size === all.length) {
+    label.textContent = selectedSources.size === 0 ? 'Ninguna fuente' : 'Todas las fuentes';
+    return;
+  }
+  // exactly one whole region selected?
+  for (const [gkey, info] of regionOrder()) {
+    if (info.sources.length === selectedSources.size && info.sources.every(s => selectedSources.has(s))) {
+      const meta = REGION_META[gkey] || {};
+      label.textContent = meta.label || info.label || gkey;
+      return;
+    }
+  }
+  label.textContent = `${selectedSources.size} fuentes`;
+}
+
+function syncSelectPanelCheckboxes() {
+  const all = selectedSources === null;
+  $('#sspAllCheckbox').checked = all || (selectedSources.size === regionOrder().flatMap(([, i]) => i.sources).length);
+  for (const [gkey, info] of regionOrder()) {
+    const regionCb = document.querySelector(`[data-ssp-region="${gkey}"]`);
+    let checkedCount = 0;
     for (const sid of info.sources) {
-      const opt = document.createElement('option');
-      opt.value = sid;
-      opt.textContent = `${label} — ${sid}`;
-      sel.appendChild(opt);
+      const cb = document.querySelector(`[data-ssp-source="${sid}"]`);
+      const isChecked = all || selectedSources.has(sid);
+      if (cb) cb.checked = isChecked;
+      if (isChecked) checkedCount++;
+    }
+    if (regionCb) {
+      regionCb.checked = checkedCount === info.sources.length;
+      regionCb.indeterminate = checkedCount > 0 && checkedCount < info.sources.length;
     }
   }
 }
+
+$('#sourceSelectBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('#sourceSelectPanel').classList.toggle('open');
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.source-select-wrap')) $('#sourceSelectPanel').classList.remove('open');
+});
+$('#sourceSelectPanel').addEventListener('click', (e) => {
+  const chevron = e.target.closest('[data-ssp-expand]');
+  if (chevron) {
+    e.preventDefault();
+    chevron.closest('.ssp-region').classList.toggle('open');
+  }
+});
+$('#sourceSelectPanel').addEventListener('change', (e) => {
+  const t = e.target;
+  const allSids = regionOrder().flatMap(([, info]) => info.sources);
+  if (t.id === 'sspAllCheckbox') {
+    selectedSources = t.checked ? null : new Set();
+  } else if (t.dataset.sspRegion) {
+    if (selectedSources === null) selectedSources = new Set(allSids);
+    const info = regionOrder().find(([g]) => g === t.dataset.sspRegion)[1];
+    for (const sid of info.sources) t.checked ? selectedSources.add(sid) : selectedSources.delete(sid);
+  } else if (t.dataset.sspSource) {
+    if (selectedSources === null) selectedSources = new Set(allSids);
+    t.checked ? selectedSources.add(t.dataset.sspSource) : selectedSources.delete(t.dataset.sspSource);
+  }
+  syncSelectPanelCheckboxes();
+  updateSourceSelectLabel();
+  runSearch(true);
+});
 
 $('#filtersToggle').addEventListener('click', () => {
   const panel = $('#filtersPanel');
@@ -580,13 +857,17 @@ $('#q').addEventListener('input', () => {
   clearTimeout(searchDebounce);
   searchDebounce = setTimeout(() => runSearch(true), 350);
 });
-['titleOnly', 'dateFrom', 'dateTo', 'regionFilter'].forEach(id => {
+['titleOnly', 'dateFrom', 'dateTo'].forEach(id => {
   $('#' + id).addEventListener('change', () => runSearch(true));
 });
 
 function buildSearchParams(offset) {
   const params = new URLSearchParams();
-  params.set('source', $('#regionFilter').value || 'all');
+  if (selectedSources === null) {
+    params.set('source', 'all');
+  } else {
+    params.set('source', Array.from(selectedSources).join(','));
+  }
   const q = $('#q').value.trim();
   if (q) params.set('q', q);
   if (q && $('#titleOnly').checked) params.set('title_only', '1');
@@ -674,6 +955,121 @@ async function toggleDetail(card, sourceId, id) {
     detail.innerHTML = `<div style="color:var(--err)">Error al cargar.</div>`;
   }
 }
+
+// ── jobs tab ─────────────────────────────────────────────────────────────
+async function renderRunningJobs() {
+  const box = $('#runningJobs');
+  let locks;
+  try {
+    const res = await fetch('/schedule/locks');
+    locks = await res.json();
+  } catch (e) {
+    box.innerHTML = '<div class="loading-msg">Error al consultar.</div>';
+    return;
+  }
+  const entries = Object.entries(locks);
+  if (!entries.length) {
+    box.innerHTML = '<div class="job-row"><span style="color:var(--muted)">Nada corriendo en este momento.</span></div>';
+    return;
+  }
+  box.innerHTML = entries.map(([sid, info]) => `
+    <div class="job-row ${info.stale ? 'stale' : 'running'}">
+      <div class="jr-top">
+        <span class="jr-name">${info.stale ? '⚠' : '<span class="live-pulse"></span>'} ${esc(LABELS[sid] || sid)}</span>
+        <span class="jr-meta">${info.age_minutes != null ? info.age_minutes + ' min' : ''}</span>
+      </div>
+      <div class="jr-meta">${esc(info.holder)}${info.stale ? ' · lock viejo, probablemente un proceso muerto' : ''}</div>
+    </div>`).join('');
+}
+
+function renderPendingJobs(pending) {
+  const box = $('#pendingJobs');
+  if (!pending.length) {
+    box.innerHTML = '<div class="job-row"><span style="color:var(--muted)">Ninguna.</span></div>';
+    return;
+  }
+  box.innerHTML = pending.map(r => `
+    <div class="job-row">
+      <div class="jr-top">
+        <span class="jr-name">${esc(LABELS[r.source_id] || r.source_id)}</span>
+        <span class="jr-meta">${esc(r.mode || '')}</span>
+      </div>
+      <div class="jr-meta">programada: ${esc((r.run_at || '').replace('T', ' ').slice(0, 16))}</div>
+    </div>`).join('');
+}
+
+function renderNightlyHistory(runs) {
+  const box = $('#nightlyHistory');
+  if (!runs.length) {
+    box.innerHTML = '<div class="job-row"><span style="color:var(--muted)">Todavía no ha corrido ninguna vez.</span></div>';
+    return;
+  }
+  box.innerHTML = runs.slice(0, 15).map(r => `
+    <div class="job-row">
+      <div class="jr-top">
+        <span class="jr-name">${esc((r.started_at || '').replace('T', ' ').slice(0, 16))}</span>
+      </div>
+      <div class="run-outcome">
+        <span class="ro-ok">✓ ${r.updated_count ?? 0}</span>
+        <span class="ro-err">✕ ${r.failed_count ?? 0}</span>
+        <span class="ro-muted">sin datos ${r.skipped_no_data_count ?? 0}</span>
+        <span class="ro-muted">apagadas ${r.skipped_disabled_count ?? 0}</span>
+      </div>
+    </div>`).join('');
+}
+
+function renderTriggerSourceOptions() {
+  const sel = $('#triggerSource');
+  const all = Object.keys(STATUS).sort((a, b) => (LABELS[a] || a).localeCompare(LABELS[b] || b));
+  sel.innerHTML = all.map(sid => `<option value="${esc(sid)}">${esc(LABELS[sid] || sid)}</option>`).join('');
+}
+
+let activeTriggerSource = null;
+$('#triggerBtn').addEventListener('click', () => {
+  const sid = $('#triggerSource').value;
+  const mode = $('#triggerMode').value;
+  const btn = $('#triggerBtn');
+  const log = $('#triggerLog');
+  if (!sid || activeTriggerSource) return;
+
+  activeTriggerSource = sid;
+  btn.disabled = true;
+  btn.textContent = '⏳ Corriendo…';
+  log.classList.add('open');
+  log.innerHTML = `<div class="pl-line">Iniciando ${mode} para ${esc(LABELS[sid] || sid)}…</div>`;
+
+  const es = new EventSource(`/archive?source=${encodeURIComponent(sid)}&mode=${encodeURIComponent(mode)}&delay=1.0`);
+  const finish = (extraLine, cls) => {
+    if (extraLine) log.innerHTML += `<div class="pl-line ${cls || ''}">${extraLine}</div>`;
+    log.scrollTop = log.scrollHeight;
+    es.close();
+    activeTriggerSource = null;
+    btn.disabled = false;
+    btn.textContent = '▶ Iniciar';
+    renderRunningJobs();
+  };
+  es.onmessage = (ev) => {
+    let data;
+    try { data = JSON.parse(ev.data); } catch (e) { return; }
+    if (data.type === 'log') {
+      log.innerHTML += `<div class="pl-line ${data.level === 'error' ? 'pl-err' : ''}">${esc(data.msg)}</div>`;
+      log.scrollTop = log.scrollHeight;
+    } else if (data.type === 'progress') {
+      log.innerHTML = log.innerHTML.replace(/<div class="pl-line pl-progress">.*<\/div>$/, '') +
+        `<div class="pl-line pl-progress">vistos ${data.seen} · guardados ${data.saved}${data.total ? ' / ~' + data.total : ''}</div>`;
+      log.scrollTop = log.scrollHeight;
+    } else if (data.type === 'done') {
+      const line = data.job_status === 'locked'
+        ? `⚠ Ya estaba corriendo otro trabajo para esta fuente.`
+        : `✓ Listo — vistos ${data.seen}, guardados ${data.saved}, total en DB ${data.total_db}`;
+      finish(line, data.job_status === 'locked' ? '' : 'pl-done');
+      if (STATUS[sid]) Object.assign(STATUS[sid], {
+        count: data.total_db, min_date: data.min_date, max_date: data.max_date, coverage: data.coverage,
+      });
+    }
+  };
+  es.onerror = () => finish('✕ Conexión interrumpida.', 'pl-err');
+});
 
 boot();
 </script>

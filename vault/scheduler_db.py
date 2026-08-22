@@ -142,6 +142,18 @@ def lock_status(source_id):
     return dict(row) if row else None
 
 
+def all_locks():
+    """Every currently-held lock, source_id -> {holder, acquired_at} -- for
+    a dashboard-level "is anything actually running right now" view. A
+    stale lock past LOCK_TTL_MINUTES is still returned here as-is (this is
+    a read, not an acquire attempt) but flagged via its age so the UI can
+    show it as probably-dead rather than actively running."""
+    con = _connect()
+    rows = con.execute("SELECT source_id, holder, acquired_at FROM source_locks").fetchall()
+    con.close()
+    return {r["source_id"]: {"holder": r["holder"], "acquired_at": r["acquired_at"]} for r in rows}
+
+
 def now_iso():
     """UTC, for audit timestamps (created_at/executed_at) -- NOT for
     comparing against run_at, which is naive local time from the

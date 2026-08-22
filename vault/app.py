@@ -834,6 +834,11 @@ def source_groups():
     return jsonify({"groups": SOURCE_GROUPS, "disabled": DISABLED_SOURCES})
 
 
+@app.route("/source_names")
+def source_names():
+    return jsonify(SOURCE_NAMES)
+
+
 @app.route("/status")
 def status():
     source_id = request.args.get("source")
@@ -856,6 +861,34 @@ def schedule_state():
         "recent": [r for r in scheduler_db.list_scheduled_runs(limit=20) if r["status"] != "pending"],
         "nightly_runs": scheduler_db.list_nightly_runs(),
     })
+
+
+@app.route("/schedule/locks")
+def schedule_locks():
+    """Every source currently locked by a running job (a manual /archive
+    call, the nightly timer, a scheduled run, ovejero_gapfill, etc.) --
+    the real "is something actually happening right now" signal, backed
+    by the same lock table /archive itself acquires/releases. A lock
+    older than LOCK_TTL_MINUTES is annotated stale=True rather than
+    hidden -- it means whatever held it died without releasing (a crash,
+    a killed process); the next real /archive call on that source will
+    reclaim it automatically, this endpoint just makes that visible
+    instead of silent."""
+    locks = scheduler_db.all_locks()
+    now = datetime.datetime.now(datetime.UTC)
+    out = {}
+    for source_id, info in locks.items():
+        try:
+            age_min = (now - datetime.datetime.fromisoformat(info["acquired_at"])).total_seconds() / 60
+        except Exception:
+            age_min = None
+        out[source_id] = {
+            "holder": info["holder"],
+            "acquired_at": info["acquired_at"],
+            "age_minutes": round(age_min, 1) if age_min is not None else None,
+            "stale": age_min is not None and age_min >= scheduler_db.LOCK_TTL_MINUTES,
+        }
+    return jsonify(out)
 
 
 @app.route("/schedule/nightly_run", methods=["POST"])
@@ -1390,11 +1423,25 @@ def _fts_query(q, title_only):
     return q
 
 
+def _parse_source_param():
+    """`source` accepts "all", a single id, or a comma-separated list of
+    ids (added for the region-checkbox multi-select in index2.html's
+    explorer) -- returns (source_ids_list, error_response_or_None)."""
+    raw = request.args.get("source", "all")
+    if raw == "all":
+        return list(EXPLORE_SOURCES), None
+    ids = [s for s in raw.split(",") if s]
+    unknown = [s for s in ids if s not in EXPLORE_SOURCES]
+    if unknown:
+        return None, (jsonify({"error": f"Unknown source(s): {', '.join(unknown)}"}), 400)
+    return ids, None
+
+
 @app.route("/api/search")
 def api_search():
-    source_id = request.args.get("source", "all")
-    if source_id != "all" and source_id not in EXPLORE_SOURCES:
-        return jsonify({"error": "Unknown source"}), 400
+    source_ids, err = _parse_source_param()
+    if err:
+        return err
 
     q = request.args.get("q", "").strip()
     title_only = request.args.get("title_only", "").lower() in ("1", "true", "on")
@@ -1405,11 +1452,8 @@ def api_search():
     offset = max(int(request.args.get("offset", 0)), 0)
 
     try:
-        if source_id == "all":
-            rows, total = db.search_all_sources(q, date_from, date_to, limit, offset,
-                                                  source_ids=EXPLORE_SOURCES)
-        else:
-            rows, total = db.search_articles(source_id, q, date_from, date_to, limit, offset)
+        rows, total = db.search_all_sources(q, date_from, date_to, limit, offset,
+                                              source_ids=source_ids)
     except Exception as e:
         # Most likely an invalid FTS5 query syntax (unbalanced quotes etc.)
         return jsonify({"error": f"Search error: {e}"}), 400
@@ -1442,16 +1486,15 @@ def _csv_field(val):
 
 @app.route("/api/export.csv")
 def api_export_csv():
-    source_id = request.args.get("source", "all")
-    if source_id != "all" and source_id not in EXPLORE_SOURCES:
-        return jsonify({"error": "Unknown source"}), 400
+    source_ids, err = _parse_source_param()
+    if err:
+        return err
 
     q = request.args.get("q", "").strip()
     title_only = request.args.get("title_only", "").lower() in ("1", "true", "on")
     q = _fts_query(q, title_only)
     date_from = request.args.get("date_from", "").strip()
     date_to = request.args.get("date_to", "").strip()
-    source_ids = list(EXPLORE_SOURCES) if source_id == "all" else [source_id]
 
     def generate():
         import csv, io
@@ -1477,7 +1520,12 @@ def api_export_csv():
                                   _csv_field(a["body_text"])])
                 yield buf.getvalue()
 
-    fname_bit = source_id if source_id != "all" else "todas-las-fuentes"
+    if set(source_ids) == set(EXPLORE_SOURCES):
+        fname_bit = "todas-las-fuentes"
+    elif len(source_ids) == 1:
+        fname_bit = source_ids[0]
+    else:
+        fname_bit = f"{len(source_ids)}-fuentes"
     filename = f"camplux_{fname_bit}_{datetime.date.today().isoformat()}.csv"
     return Response(
         stream_with_context(generate()),
