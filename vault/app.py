@@ -863,17 +863,31 @@ def schedule_state():
     })
 
 
+UI_STALE_THRESHOLD_MINUTES = 180  # display-only "probably dead" cutoff, see docstring below
+
+
 @app.route("/schedule/locks")
 def schedule_locks():
     """Every source currently locked by a running job (a manual /archive
     call, the nightly timer, a scheduled run, ovejero_gapfill, etc.) --
     the real "is something actually happening right now" signal, backed
-    by the same lock table /archive itself acquires/releases. A lock
-    older than LOCK_TTL_MINUTES is annotated stale=True rather than
-    hidden -- it means whatever held it died without releasing (a crash,
-    a killed process); the next real /archive call on that source will
-    reclaim it automatically, this endpoint just makes that visible
-    instead of silent."""
+    by the same lock table /archive itself acquires/releases.
+
+    Two different thresholds on purpose, don't conflate them:
+    - scheduler_db.LOCK_TTL_MINUTES (30 min) is for RECLAIM -- how old a
+      lock has to be before a *new* /archive call is allowed to steal it
+      and assume the old holder is dead. That's the right call for normal
+      nightly `mode=update` runs, which really should be quick.
+    - UI_STALE_THRESHOLD_MINUTES (below) is for DISPLAY -- confirmed live
+      2026-08-22 that a single `mode=range` year for ovejero_gapfill can
+      legitimately run 1-2+ hours (a slow host + a network retry), so
+      flagging anything past 30 min as "probably dead" here would have
+      been actively misleading (it was asked "is this still doing
+      anything" while a real, progressing job was 55 minutes in). A lock
+      this old genuinely might be orphaned though (steal-eligible per the
+      reclaim TTL above already), so it's still surfaced, just not
+      alarmingly mislabeled.
+    """
     locks = scheduler_db.all_locks()
     now = datetime.datetime.now(datetime.UTC)
     out = {}
@@ -886,7 +900,8 @@ def schedule_locks():
             "holder": info["holder"],
             "acquired_at": info["acquired_at"],
             "age_minutes": round(age_min, 1) if age_min is not None else None,
-            "stale": age_min is not None and age_min >= scheduler_db.LOCK_TTL_MINUTES,
+            "reclaimable": age_min is not None and age_min >= scheduler_db.LOCK_TTL_MINUTES,
+            "stale": age_min is not None and age_min >= UI_STALE_THRESHOLD_MINUTES,
         }
     return jsonify(out)
 
@@ -1532,6 +1547,119 @@ def api_export_csv():
         mimetype="text/csv; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@app.route("/api/source_stats/<source_id>")
+def api_source_stats(source_id):
+    """Cheap, DB-only per-source aggregates (image/author coverage) --
+    deliberately NOT part of /status (called for all ~120 sources at once
+    on every page load; an extra COUNT per source there would reintroduce
+    the exact full-table-scan slowdown already fixed once this session).
+    Meant to be called lazily, once, when a single source's detail is
+    expanded in the UI."""
+    if source_id not in SOURCES:
+        return jsonify({"error": "Unknown source"}), 400
+    if not db.db_exists(source_id):
+        return jsonify({"error": "No data yet"}), 400
+    con = db.connect(source_id)
+    row = con.execute(
+        "SELECT COUNT(*), "
+        "SUM(CASE WHEN image_local_path IS NOT NULL AND image_local_path != '' THEN 1 ELSE 0 END), "
+        "SUM(CASE WHEN image_url IS NOT NULL AND image_url != '' THEN 1 ELSE 0 END), "
+        "SUM(CASE WHEN author IS NOT NULL AND author != '' THEN 1 ELSE 0 END) "
+        "FROM articles"
+    ).fetchone()
+    con.close()
+    total, has_image, has_image_url, has_author = row
+    return jsonify({
+        "total": total,
+        "has_image": has_image or 0,
+        "has_image_url": has_image_url or 0,  # a downloadable image was found, even if not fetched yet
+        "has_author": has_author or 0,
+    })
+
+
+@app.route("/api/source_completeness/<source_id>")
+def api_source_completeness(source_id):
+    """Live, on-demand check against the source's own site: how many posts
+    does it actually have right now, and what's its real date range, vs
+    what we've archived. Deliberately a separate, explicitly-triggered
+    endpoint from source_stats above -- this makes a real network request
+    to a third-party site, not something to fire automatically for every
+    row. Best-effort: many things can make this inconclusive (non-WP site,
+    a host that blocks the probe, a site with a pagination cap like
+    RedHoy's -- see deploy/expansion/regions/metropolitana.md), so a
+    failure here is reported, not raised as an error."""
+    if source_id not in SOURCES:
+        return jsonify({"error": "Unknown source"}), 400
+    status = db.get_status(source_id)
+    if not status["exists"]:
+        return jsonify({"error": "No data yet"}), 400
+
+    con = db.connect(source_id)
+    sample = con.execute("SELECT url FROM articles ORDER BY date DESC LIMIT 1").fetchone()
+    con.close()
+    if not sample:
+        return jsonify({"checked": False, "reason": "No hay artículos para tomar como muestra."})
+
+    import requests
+    from urllib.parse import urlsplit
+    from scrapers.base import HEADERS
+    from scrapers.wordpress import BROWSER_UA
+
+    parts = urlsplit(sample["url"])
+    api = f"{parts.scheme}://{parts.netloc}/wp-json/wp/v2/posts"
+
+    def probe(headers):
+        newest = requests.get(api, params={"per_page": 1, "orderby": "date", "order": "desc"},
+                               headers=headers, timeout=10)
+        oldest = requests.get(api, params={"per_page": 1, "orderby": "date", "order": "asc"},
+                               headers=headers, timeout=10)
+        return newest, oldest
+
+    try:
+        newest, oldest = probe(HEADERS)
+        if newest.status_code == 403:
+            newest, oldest = probe({**HEADERS, "User-Agent": BROWSER_UA})
+        if newest.status_code != 200 or "json" not in newest.headers.get("Content-Type", ""):
+            raise ValueError(f"HTTP {newest.status_code}")
+        newest_json = newest.json()
+        oldest_json = oldest.json() if oldest.status_code == 200 else []
+        live_total = int(newest.headers.get("X-WP-Total", 0))
+        live_newest = newest_json[0]["date"][:10] if newest_json else None
+        live_oldest = oldest_json[0]["date"][:10] if oldest_json else None
+    except Exception as e:
+        return jsonify({
+            "checked": False,
+            "reason": f"No se pudo verificar en vivo ({e}) -- probablemente no es "
+                       f"WordPress en esta ruta, o el sitio bloquea la verificación.",
+            "our_count": status["count"], "our_min_date": status["min_date"],
+            "our_max_date": status["max_date"],
+        })
+
+    gap_before = None
+    if live_oldest and status["min_date"] and live_oldest < status["min_date"]:
+        gap_before = {"from": live_oldest, "to": status["min_date"]}
+    stale_days = None
+    if live_newest and status["max_date"]:
+        try:
+            stale_days = (datetime.date.fromisoformat(live_newest)
+                           - datetime.date.fromisoformat(status["max_date"])).days
+        except ValueError:
+            pass
+
+    return jsonify({
+        "checked": True,
+        "checked_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "live_total": live_total,
+        "live_oldest": live_oldest,
+        "live_newest": live_newest,
+        "our_count": status["count"],
+        "our_min_date": status["min_date"],
+        "our_max_date": status["max_date"],
+        "gap_before": gap_before,
+        "stale_days": stale_days,
+    })
 
 
 @app.route("/api/article/<source_id>/<int:article_id>")

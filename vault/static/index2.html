@@ -226,6 +226,27 @@
   .coverage-labels { display: flex; gap: 2px; margin-top: 2px; }
   .coverage-labels span { flex: 1; font-size: 9px; text-align: center; color: var(--muted2); overflow: hidden; }
 
+  .sd-stat-bar { display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 11.5px; }
+  .sd-stat-bar .sb-track { flex: 1; height: 5px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
+  .sd-stat-bar .sb-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+  .sd-stat-bar .sb-pct { width: 38px; text-align: right; color: var(--muted2); flex-shrink: 0; }
+
+  .sd-check-btn {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 600; margin: 8px 0 4px;
+  }
+  .sd-verdict { font-size: 12px; margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--surface2); }
+  .sd-verdict.ok { border-left: 3px solid var(--ok); }
+  .sd-verdict.warn { border-left: 3px solid var(--warn); }
+  .sd-verdict.unknown { border-left: 3px solid var(--muted2); color: var(--muted); }
+
+  .sd-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .sd-actions button {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 999px; padding: 6px 12px; font-size: 11.5px; font-weight: 600;
+  }
+  .sd-actions button:disabled { color: var(--muted2); }
+
   /* toggle switch */
   .switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
   .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
@@ -653,7 +674,79 @@ function renderSourceDetail(sid) {
     <div class="sd-line"><b>Tamaño en disco:</b> ${s.size_mb ?? '?'} MB</div>
     ${years.length ? `<div class="sd-line"><b>Cobertura por año:</b></div>
       <div class="coverage-bars">${bars}</div>
-      <div class="coverage-labels">${labels}</div>` : ''}`;
+      <div class="coverage-labels">${labels}</div>` : ''}
+    <div id="sd-stats-${esc(sid)}"><div class="sd-line" style="color:var(--muted2)">Cargando estadísticas…</div></div>
+    <button class="sd-check-btn" type="button" data-check-completeness="${esc(sid)}">🔍 Verificar completitud en el sitio real</button>
+    <div id="sd-completeness-${esc(sid)}"></div>
+    <div class="sd-actions">
+      <button type="button" data-run-job="${esc(sid)}" data-mode="update">↻ Actualizar</button>
+      <button type="button" data-run-job="${esc(sid)}" data-mode="full">⏬ Completo (histórico)</button>
+      <button type="button" data-run-job="${esc(sid)}" data-mode="backfill">🧩 Rellenar huecos</button>
+      <button type="button" data-run-images="${esc(sid)}">🖼 Descargar imágenes</button>
+    </div>
+    <div class="progress-log" id="sd-log-${esc(sid)}"></div>`;
+
+  fetchSourceStats(sid);
+}
+
+async function fetchSourceStats(sid) {
+  const box = document.getElementById(`sd-stats-${sid}`);
+  if (!box) return;
+  try {
+    const res = await fetch(`/api/source_stats/${encodeURIComponent(sid)}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'error');
+    const pct = (n) => d.total ? Math.round(100 * n / d.total) : 0;
+    box.innerHTML = `
+      <div class="sd-line"><b>Cobertura de datos:</b></div>
+      <div class="sd-stat-bar">
+        <span style="width:70px">Con imagen</span>
+        <div class="sb-track"><div class="sb-fill" style="width:${pct(d.has_image)}%"></div></div>
+        <span class="sb-pct">${pct(d.has_image)}%</span>
+      </div>
+      <div class="sd-stat-bar">
+        <span style="width:70px">Con autor</span>
+        <div class="sb-track"><div class="sb-fill" style="width:${pct(d.has_author)}%"></div></div>
+        <span class="sb-pct">${pct(d.has_author)}%</span>
+      </div>
+      ${d.has_image_url > d.has_image ? `<div class="sd-line" style="font-size:11px;color:var(--muted2)">${(d.has_image_url - d.has_image).toLocaleString('es-CL')} artículos tienen una URL de imagen detectada pero todavía no descargada — usa "Descargar imágenes".</div>` : ''}`;
+  } catch (e) {
+    box.innerHTML = '<div class="sd-line" style="color:var(--muted2)">No se pudo cargar.</div>';
+  }
+}
+
+async function checkCompleteness(sid, btn) {
+  const box = document.getElementById(`sd-completeness-${sid}`);
+  btn.disabled = true;
+  btn.textContent = '⏳ Verificando…';
+  box.innerHTML = '';
+  try {
+    const res = await fetch(`/api/source_completeness/${encodeURIComponent(sid)}`);
+    const d = await res.json();
+    if (!d.checked) {
+      box.innerHTML = `<div class="sd-verdict unknown">${esc(d.reason || d.error || 'No se pudo verificar.')}</div>`;
+    } else {
+      const lines = [];
+      let cls = 'ok';
+      lines.push(`En el sitio ahora mismo: ~${d.live_total.toLocaleString('es-CL')} artículos, ${esc(d.live_oldest || '?')} → ${esc(d.live_newest || '?')}`);
+      lines.push(`Tenemos: ${d.our_count.toLocaleString('es-CL')} artículos, ${esc(d.our_min_date || '?')} → ${esc(d.our_max_date || '?')}`);
+      if (d.gap_before) {
+        cls = 'warn';
+        lines.push(`⚠ Podría haber historia disponible desde ${esc(d.gap_before.from)} que todavía no tenemos (nuestro archivo empieza en ${esc(d.gap_before.to)}) — probá "Rellenar huecos".`);
+      }
+      if (d.stale_days != null && d.stale_days > 2) {
+        cls = 'warn';
+        lines.push(`⚠ El sitio tiene contenido ${d.stale_days} día(s) más reciente que lo último que tenemos — probá "Actualizar".`);
+      }
+      if (cls === 'ok') lines.push('✓ Al día, y sin huecos históricos evidentes frente al sitio real.');
+      box.innerHTML = `<div class="sd-verdict ${cls}">${lines.map(l => `<div>${l}</div>`).join('')}
+        <div style="color:var(--muted2);font-size:10.5px;margin-top:4px">Estimado a partir de una muestra en vivo del sitio — no es exacto.</div></div>`;
+    }
+  } catch (e) {
+    box.innerHTML = `<div class="sd-verdict unknown">Error al verificar.</div>`;
+  }
+  btn.disabled = false;
+  btn.textContent = '🔍 Verificar completitud en el sitio real';
 }
 
 container_click_delegate();
@@ -684,6 +777,30 @@ function container_click_delegate() {
       const wasOpen = wrap.classList.contains('open');
       wrap.classList.toggle('open');
       if (!wasOpen) renderSourceDetail(sid);
+      return;
+    }
+    const checkBtn = e.target.closest('[data-check-completeness]');
+    if (checkBtn) {
+      checkCompleteness(checkBtn.dataset.checkCompleteness, checkBtn);
+      return;
+    }
+    const runBtn = e.target.closest('[data-run-job]');
+    if (runBtn) {
+      const sid = runBtn.dataset.runJob;
+      const mode = runBtn.dataset.mode;
+      runStreamedJob(
+        `/archive?source=${encodeURIComponent(sid)}&mode=${encodeURIComponent(mode)}&delay=1.0`,
+        sid, { log: document.getElementById(`sd-log-${sid}`) }
+      );
+      return;
+    }
+    const imgBtn = e.target.closest('[data-run-images]');
+    if (imgBtn) {
+      const sid = imgBtn.dataset.runImages;
+      runStreamedJob(
+        `/images/backfill?source=${encodeURIComponent(sid)}&limit=200`,
+        sid, { log: document.getElementById(`sd-log-${sid}`), onDone: () => fetchSourceStats(sid) }
+      );
       return;
     }
   });
@@ -972,14 +1089,19 @@ async function renderRunningJobs() {
     box.innerHTML = '<div class="job-row"><span style="color:var(--muted)">Nada corriendo en este momento.</span></div>';
     return;
   }
-  box.innerHTML = entries.map(([sid, info]) => `
+  box.innerHTML = entries.map(([sid, info]) => {
+    let note = '';
+    if (info.stale) note = ' · lock muy viejo, probablemente un proceso muerto';
+    else if (info.reclaimable) note = ' · corriendo más de lo usual (normal para un backfill grande)';
+    return `
     <div class="job-row ${info.stale ? 'stale' : 'running'}">
       <div class="jr-top">
         <span class="jr-name">${info.stale ? '⚠' : '<span class="live-pulse"></span>'} ${esc(LABELS[sid] || sid)}</span>
         <span class="jr-meta">${info.age_minutes != null ? info.age_minutes + ' min' : ''}</span>
       </div>
-      <div class="jr-meta">${esc(info.holder)}${info.stale ? ' · lock viejo, probablemente un proceso muerto' : ''}</div>
-    </div>`).join('');
+      <div class="jr-meta">${esc(info.holder)}${note}</div>
+    </div>`;
+  }).join('');
 }
 
 function renderPendingJobs(pending) {
@@ -1024,28 +1146,25 @@ function renderTriggerSourceOptions() {
   sel.innerHTML = all.map(sid => `<option value="${esc(sid)}">${esc(LABELS[sid] || sid)}</option>`).join('');
 }
 
-let activeTriggerSource = null;
-$('#triggerBtn').addEventListener('click', () => {
-  const sid = $('#triggerSource').value;
-  const mode = $('#triggerMode').value;
-  const btn = $('#triggerBtn');
-  const log = $('#triggerLog');
-  if (!sid || activeTriggerSource) return;
-
-  activeTriggerSource = sid;
-  btn.disabled = true;
-  btn.textContent = '⏳ Corriendo…';
+// Shared by the Jobs-tab trigger form and each source's own quick-action
+// buttons in the Fuentes tab -- one EventSource consumer, different UI
+// targets. `url` is the full /archive (or /images/backfill) query string;
+// `sid` only matters for updating the cached STATUS entry afterward.
+let activeJob = null; // source_id of whatever's running via THIS UI right now
+function runStreamedJob(url, sid, { btn, btnIdleLabel, log, onDone }) {
+  if (activeJob) return;
+  activeJob = sid;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
   log.classList.add('open');
-  log.innerHTML = `<div class="pl-line">Iniciando ${mode} para ${esc(LABELS[sid] || sid)}…</div>`;
+  log.innerHTML = `<div class="pl-line">Iniciando…</div>`;
 
-  const es = new EventSource(`/archive?source=${encodeURIComponent(sid)}&mode=${encodeURIComponent(mode)}&delay=1.0`);
+  const es = new EventSource(url);
   const finish = (extraLine, cls) => {
     if (extraLine) log.innerHTML += `<div class="pl-line ${cls || ''}">${extraLine}</div>`;
     log.scrollTop = log.scrollHeight;
     es.close();
-    activeTriggerSource = null;
-    btn.disabled = false;
-    btn.textContent = '▶ Iniciar';
+    activeJob = null;
+    if (btn) { btn.disabled = false; btn.textContent = btnIdleLabel; }
     renderRunningJobs();
   };
   es.onmessage = (ev) => {
@@ -1056,19 +1175,35 @@ $('#triggerBtn').addEventListener('click', () => {
       log.scrollTop = log.scrollHeight;
     } else if (data.type === 'progress') {
       log.innerHTML = log.innerHTML.replace(/<div class="pl-line pl-progress">.*<\/div>$/, '') +
-        `<div class="pl-line pl-progress">vistos ${data.seen} · guardados ${data.saved}${data.total ? ' / ~' + data.total : ''}</div>`;
+        `<div class="pl-line pl-progress">vistos ${data.seen ?? data.checked} · guardados ${data.saved ?? data.downloaded}${data.total ? ' / ~' + data.total : ''}</div>`;
       log.scrollTop = log.scrollHeight;
     } else if (data.type === 'done') {
-      const line = data.job_status === 'locked'
-        ? `⚠ Ya estaba corriendo otro trabajo para esta fuente.`
-        : `✓ Listo — vistos ${data.seen}, guardados ${data.saved}, total en DB ${data.total_db}`;
+      let line;
+      if (data.job_status === 'locked') {
+        line = '⚠ Ya estaba corriendo otro trabajo para esta fuente.';
+      } else if ('downloaded' in data) {
+        line = `✓ Listo — ${data.checked} revisadas, ${data.downloaded} imágenes descargadas`;
+      } else {
+        line = `✓ Listo — vistos ${data.seen}, guardados ${data.saved}, total en DB ${data.total_db}`;
+      }
       finish(line, data.job_status === 'locked' ? '' : 'pl-done');
-      if (STATUS[sid]) Object.assign(STATUS[sid], {
+      if (sid && STATUS[sid] && data.total_db != null) Object.assign(STATUS[sid], {
         count: data.total_db, min_date: data.min_date, max_date: data.max_date, coverage: data.coverage,
       });
+      if (onDone) onDone(data);
     }
   };
   es.onerror = () => finish('✕ Conexión interrumpida.', 'pl-err');
+}
+
+$('#triggerBtn').addEventListener('click', () => {
+  const sid = $('#triggerSource').value;
+  const mode = $('#triggerMode').value;
+  if (!sid) return;
+  runStreamedJob(
+    `/archive?source=${encodeURIComponent(sid)}&mode=${encodeURIComponent(mode)}&delay=1.0`,
+    sid, { btn: $('#triggerBtn'), btnIdleLabel: '▶ Iniciar', log: $('#triggerLog') }
+  );
 });
 
 boot();
