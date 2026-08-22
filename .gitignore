@@ -12,6 +12,7 @@ __pycache__/
 logs/
 deploy/logs_*.log
 deploy/.ovejero_gapfill_progress.json
+deploy/.quality_check_report.json
 
 # ── Environment / OS ────────────────────────────────────
 .env
