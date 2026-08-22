@@ -18,6 +18,7 @@ session. Logs to deploy/logs_ovejero_gapfill.log.
 """
 import datetime
 import json
+import sys
 import os
 import time
 
@@ -112,7 +113,8 @@ def run_year_chunk(year, date_from, date_to):
 
 
 def main():
-    sleep_until_start()
+    if "--now" not in sys.argv:
+        sleep_until_start()
     session_start = time.time()
     done_years = load_progress()
     log(f"Starting session. Already-completed years: {sorted(done_years) or 'none'}")

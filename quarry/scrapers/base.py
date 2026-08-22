@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 HEADERS = {
     "User-Agent": (
-        "CAMPlux-Quarry/1.0 (academic corpus research, Magallanes media; "
+        "camplux-Quarry/1.0 (academic corpus research, Magallanes media; "
         "contact: culpem@research.local)"
     ),
     "Accept-Language": "es-CL,es;q=0.9,en;q=0.5",

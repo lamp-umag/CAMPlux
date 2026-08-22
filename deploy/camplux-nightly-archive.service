@@ -1,10 +1,10 @@
 [Unit]
-Description=CAMPlux Vault: incremental archive update for all sources with existing data
+Description=camplux Vault: incremental archive update for all sources with existing data
 After=docker.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
-WorkingDirectory=/home/mnx/CAMPlux
-ExecStart=/usr/bin/python3 /home/mnx/CAMPlux/deploy/nightly_archive.py
+WorkingDirectory=/home/mnx/camplux
+ExecStart=/usr/bin/python3 /home/mnx/camplux/deploy/nightly_archive.py
 User=mnx

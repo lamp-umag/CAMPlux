@@ -257,7 +257,7 @@ def build(file_paths, settings, output_dir):
     # ── Write metadata JSON ───────────────────────────────────────────────────
     meta = {
         "app": "DewuRelatio",
-        "suite": "CAMPlux",
+        "suite": "camplux",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "input": {
             "files": file_meta,

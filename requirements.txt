@@ -1,4 +1,4 @@
-# CAMPlux — Beacon launcher dependencies.
+# camplux — Beacon launcher dependencies.
 # Each module installs its own requirements (see run.py / vault/requirements.txt …).
 flask
 requests

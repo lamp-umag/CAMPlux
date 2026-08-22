@@ -1,4 +1,4 @@
-# 🐾 CAMPlux
+# 🐾 camplux
 
 **Corpus Acquisition & Media Processing** toolkit, with a lightweight user experience.
 **Corpus y Análisis de Medios de Prensa.**
@@ -9,7 +9,7 @@ Psicosocial, Universidad de Magallanes). Each module does one job, runs as a
 local Flask app on its own port, and hands its output to the next. The
 **Beacon** dashboard launches and monitors them all.
 
-> CAMPlux is the successor to the `MolfunCognitio` / `KullinCognitio` prototype
+> camplux is the successor to the `MolfunCognitio` / `KullinCognitio` prototype
 > suite. The original animal-named modules live on as the icons you'll see in
 > the dashboard. 🦊🐋🕷️🐱🦅🐍
 
@@ -19,12 +19,12 @@ local Flask app on its own port, and hands its output to the next. The
 
 | | Module | Folder | Port | Does |
 |--|--|--|--|--|
-| 🐋 | **CAMPlux-Vault**    | `vault/`   | 5001 | Local persistent archive (SQLite, one DB per source, full-text search). The data layer. |
-| 🦊 | **CAMPlux-Quarry**   | `quarry/`  | 5002 | Media scraper. Builds corpora from news sources; reads Vault as a cache. |
-| 🐱 | **CAMPlux-Cleaner**  | `cleaner/` | 5003 | Cleaning, deduplication and text standardisation of scraped CSVs. |
-| 🐍 | **CAMPlux-Prism**    | `prism/`   | 5004 | LLM analysis (via Ollama): sentiment, content classification, yes/no questions. |
-| 🕷️ | **CAMPlux-Weaver**   | `weaver/`  | 5005 | Concept co-occurrence networks → GEXF matrices for Gephi. |
-| 🦅 | **CAMPlux-Stats**    | `stats/`   | 5006 | Statistical analysis of the corpus. |
+| 🐋 | **camplux-Vault**    | `vault/`   | 5001 | Local persistent archive (SQLite, one DB per source, full-text search). The data layer. |
+| 🦊 | **camplux-Quarry**   | `quarry/`  | 5002 | Media scraper. Builds corpora from news sources; reads Vault as a cache. |
+| 🐱 | **camplux-Cleaner**  | `cleaner/` | 5003 | Cleaning, deduplication and text standardisation of scraped CSVs. |
+| 🐍 | **camplux-Prism**    | `prism/`   | 5004 | LLM analysis (via Ollama): sentiment, content classification, yes/no questions. |
+| 🕷️ | **camplux-Weaver**   | `weaver/`  | 5005 | Concept co-occurrence networks → GEXF matrices for Gephi. |
+| 🦅 | **camplux-Stats**    | `stats/`   | 5006 | Statistical analysis of the corpus. |
 | 🐾 | **Beacon** (launcher) | *(root)*  | 5050 | Dashboard + process manager. Starts everything, shows live status. |
 
 ---
@@ -88,7 +88,7 @@ python launcher.py
 
 ### Prism needs Ollama
 
-CAMPlux-Prism calls a local [Ollama](https://ollama.com) server for LLM
+camplux-Prism calls a local [Ollama](https://ollama.com) server for LLM
 analysis. Install it, then:
 
 ```bash
@@ -153,7 +153,7 @@ run `python app.py` to use it standalone, independent of Beacon.
 
 ## History & provenance
 
-CAMPlux was migrated from a git-submodule prototype into this single clean
+camplux was migrated from a git-submodule prototype into this single clean
 monorepo on 2026-06-24. The prototype modules remain archived under the
 `heelgueta` GitHub account (CulpemCorpus, YeneConservatio, LlallinRelatio,
 ÑarkiMundatio, MañkeAnalytica, FiluSententia) and under the
@@ -165,4 +165,4 @@ canonical, citable version going forward.
 ## License & citation
 
 Part of the LAMP UMAG research tooling ecosystem. For academic use; please cite
-the lab when CAMPlux contributes to published work.
+the lab when camplux contributes to published work.

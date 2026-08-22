@@ -1,7 +1,7 @@
 """
-CAMPlux — Beacon launcher.
+camplux — Beacon launcher.
 
-Beacon is the suite's control tower: it starts every CAMPlux module as a
+Beacon is the suite's control tower: it starts every camplux module as a
 subprocess (each a small Flask app on its own port) and serves a status
 dashboard at http://localhost:5050 that shows which modules are up.
 
@@ -29,32 +29,32 @@ DASHBOARD_PORT = 5050   # 5000 is taken by macOS AirPlay Receiver by default
 # Startup order matters: Vault (the data layer) initializes first.
 APPS = [
     {
-        "id": "vault", "name": "CAMPlux-Vault", "dir": "vault", "port": 5001,
+        "id": "vault", "name": "camplux-Vault", "dir": "vault", "port": 5001,
         "emoji": "🐋", "accent": "#2e7fd8",
         "desc": "Archivo local persistente de medios (storage)",
     },
     {
-        "id": "quarry", "name": "CAMPlux-Quarry", "dir": "quarry", "port": 5002,
+        "id": "quarry", "name": "camplux-Quarry", "dir": "quarry", "port": 5002,
         "emoji": "🦊", "accent": "#e8733a",
         "desc": "Scraper de medios para construir corpus (acquisition)",
     },
     {
-        "id": "cleaner", "name": "CAMPlux-Cleaner", "dir": "cleaner", "port": 5003,
+        "id": "cleaner", "name": "camplux-Cleaner", "dir": "cleaner", "port": 5003,
         "emoji": "🐱", "accent": "#d4a86a",
         "desc": "Limpieza, deduplicación y estandarización de textos",
     },
     {
-        "id": "prism", "name": "CAMPlux-Prism", "dir": "prism", "port": 5004,
+        "id": "prism", "name": "camplux-Prism", "dir": "prism", "port": 5004,
         "emoji": "🐍", "accent": "#8bc44c",
         "desc": "Análisis LLM: sentimiento, contenido, preguntas sí/no",
     },
     {
-        "id": "weaver", "name": "CAMPlux-Weaver", "dir": "weaver", "port": 5005,
+        "id": "weaver", "name": "camplux-Weaver", "dir": "weaver", "port": 5005,
         "emoji": "🕷️", "accent": "#3aab8f",
         "desc": "Red de conceptos / matriz para Gephi",
     },
     {
-        "id": "stats", "name": "CAMPlux-Stats", "dir": "stats", "port": 5006,
+        "id": "stats", "name": "camplux-Stats", "dir": "stats", "port": 5006,
         "emoji": "🦅", "accent": "#9b7dd4",
         "desc": "Análisis estadístico del corpus",
     },
@@ -94,7 +94,7 @@ def start_app(app: dict) -> subprocess.Popen | None:
 def cleanup():
     if not processes:
         return
-    print("\nApagando CAMPlux…")
+    print("\nApagando camplux…")
     for _, p in processes:
         if p and p.poll() is None:
             try:
@@ -137,7 +137,7 @@ def status():
 def main():
     (HERE / "logs").mkdir(exist_ok=True)
 
-    print("🐾 CAMPlux — Beacon iniciando la suite")
+    print("🐾 camplux — Beacon iniciando la suite")
     print("=" * 50)
 
     for app in APPS:

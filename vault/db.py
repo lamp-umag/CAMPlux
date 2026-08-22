@@ -35,6 +35,152 @@ ARCHIVE_STARTS = {
     "cnnchile":      "2011-11-01",
     # ── Otras regiones ────────────────────────────────────────────────────────
     "ladiscusion":   "2015-01-01",
+    # ── Aysén (national expansion, see deploy/expansion/) ─────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed.
+    "diariodeaysen":     "2026-03-25",
+    "diarioaysen":       "2022-05-13",
+    "canalsurpatagonia": "2024-01-02",
+    "radiosantamaria":   "2018-06-28",
+    "rln":               "2018-01-01",
+    # ── Arica y Parinacota (national expansion) ────────────────────────────────
+    "aricahoy":              "2012-11-22",
+    "aricaldia":             "2014-10-09",
+    "elmorrodearica":        "2020-10-06",
+    "cappissimamultimedial": "2023-07-21",
+    # ── Atacama (national expansion) ────────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed.
+    "atacamanoticias":  "2019-10-01",
+    "chanarcillo":      "2015-03-13",
+    "tierramarillano":  "2017-01-13",
+    "hvaradio":         "2019-04-01",
+    "atacamaenlinea":   "2012-02-20",
+    "madero":           "2022-06-01",
+    # ── Tarapacá (national expansion) ───────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed.
+    "diariolongino": "2021-11-08",
+    "iquiquetv":     "2018-09-13",
+    "iquiquealdia":  "2024-01-01",
+    "radiopaulina":  "2009-02-02",
+    "rtccormudesi":  "2026-07-13",
+    # ── Los Ríos (national expansion) ───────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed. (noticiaslosrios:
+    # one single post has a data-entry-typo year "0026"; used the site's
+    # real oldest post instead, see the scraper's own docstring.)
+    "radioaustralvaldivia": "2020-09-18",
+    "losriosaldia":         "2013-06-25",
+    "periodicolosrios":     "2018-08-08",
+    "noticiaslosrios":      "2014-02-21",
+    "rioenlinea":           "2018-08-01",
+    "diarioelranco":        "2009-07-08",
+    # ── Ñuble (national expansion) ──────────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed.
+    "nubleonline":      "2023-04-18",
+    "nubleactual":      "2023-10-30",
+    "lafontana":        "2020-04-16",
+    "quirihuenoticias": "2021-06-19",
+    "radiocontacto":    "2021-12-07",
+    "radionuble":       "2024-12-02",
+    # ── Antofagasta (national expansion) ────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed.
+    "diarioantofagasta": "2011-02-07",
+    "regionalista":      "2018-03-05",
+    "radionuevomundo":   "2017-01-03",
+    # ── Coquimbo (national expansion) ───────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed. (laserenaonline:
+    # one single post has a data-entry-typo year "0027"; used the site's real
+    # oldest post instead, see the scraper's own docstring.)
+    "ovallehoy":      "2014-07-19",
+    "laserenaonline": "2015-08-10",
+    "elcoquimbano":   "2020-08-20",
+    "elillapelino":   "2020-11-02",
+    "diariochoapa":   "2021-07-17",
+    "radioriquelme":  "2019-01-29",
+    # ── Los Lagos (national expansion) ──────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed.
+    "diarioloslagos":    "2025-10-06",
+    "chiloenews":        "2021-06-01",
+    "laopiniondechiloe": "2015-02-08",
+    "diariopuertovaras": "2017-10-18",
+    "radiofrutillarfm":  "2023-07-20",
+    # ── O'Higgins (national expansion) ──────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed. (diarioelmarino:
+    # oldest indexed posts are a real digitized 1907 historical archive, not
+    # a data-entry typo -- see the scraper's own docstring.)
+    "elrancaguino":     "2009-10-01",
+    "diarioelpulso":    "2019-09-01",
+    "radiomachali":     "2026-03-31",
+    "diariorancagua":   "2013-10-31",
+    "hdn":              "2015-09-05",
+    "tribunacolchagua": "2023-01-04",
+    "diarioelmarino":   "1907-08-18",
+    "pichilemutv":      "2008-04-29",
+    "radiosantacruz":   "2021-10-08",
+    # ── Araucanía (national expansion) ──────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed.
+    "araucanianoticias":    "2011-01-28",
+    "elperiodico":          "2025-07-09",
+    "malleconoticias":      "2026-02-23",
+    "angolnoticiasnew":     "2023-12-29",
+    "lasnoticiasdemalleco": "2022-07-20",
+    "elespejodemalleco":    "2019-11-25",
+    "malleco7":             "2019-05-05",
+    "villarricaldia":       "2023-05-10",
+    # ── Maule (national expansion) ──────────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed. (cauquenesnet:
+    # oldest indexed posts are a real digitized political-history archive
+    # back to 2000, not a data-entry typo -- see the scraper's own
+    # docstring.)
+    "diariotalca":          "2020-12-03",
+    "elmauleinforma":       "2020-09-07",
+    "radiochilenadelmaule": "2021-03-11",
+    "diarioelcentro":       "2022-02-25",
+    "cronicanoticias":      "2024-01-03",
+    "diariolinares":        "2020-12-03",
+    "diariocauquenes":      "2020-12-03",
+    "linaresenlinea":       "2016-09-19",
+    "cauquenesnet":         "2000-03-12",
+    # ── Biobío (national expansion) ─────────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed.
+    "bionoticias":      "2014-06-01",
+    "elcontraste":      "2019-03-10",
+    "diarioprovincial": "2020-06-03",
+    "araucovision":     "2025-03-05",
+    # ── Valparaíso (national expansion) ─────────────────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed.
+    "observador":     "2016-10-20",
+    "g5noticias":     "2020-01-08",
+    "diariolaquinta": "2018-03-08",
+    "epicentrochile": "2012-07-18",
+    "elaconcagua":    "2016-01-04",
+    "elproa":         "2021-01-01",
+    # ── Región Metropolitana (national expansion) ───────────────────────────
+    # dates below = each site's own oldest-indexed WP post, confirmed live
+    # 2026-08-22 via ?orderby=date&order=asc -- not guessed.
+    "elcomunicador":       "2025-01-02",
+    "diarioellabrador":    "2025-03-07",
+    "portaldemelipilla":   "2017-01-09",
+    "puentealtoaldia":     "2024-04-10",
+    "puentealtonline":     "2024-06-24",
+    "portalpuentealto":    "2002-09-04",
+    "redhoy":              "2025-01-01",
+    "lavozdemaipu":        "2009-08-05",
+    "labatalla":           "2010-04-21",
+    "noticiasdelsol":      "2023-02-08",
+    "delh":                "2019-09-03",
+    "portalmetropolitano": "2022-09-05",
     # ── Internacional (WP REST API) ───────────────────────────────────────────
     "techcrunch":        "2005-06-01",
     "variety":           "2010-01-01",
@@ -156,6 +302,14 @@ def init_db(source_id):
     # backfilled yet, '' = backfilled but the site has no author for this row.
     if "author" not in cols:
         con.execute("ALTER TABLE articles ADD COLUMN author TEXT")
+    # Migration: date indexes (2026-08-21) -- get_status()'s MIN/MAX(date) and
+    # per-year GROUP BY substr(date,1,4) were doing a full table scan on every
+    # call, which on the larger sources (elpinguino: ~192k rows) made /status
+    # take 30-80s and blew nightly_archive.py's 30s request timeout every
+    # night. Confirmed live before fixing, not guessed.
+    con.execute("CREATE INDEX IF NOT EXISTS idx_articles_date ON articles(date)")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_articles_year ON articles(substr(date,1,4))")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_articles_scraped_at ON articles(scraped_at)")
     con.commit()
     con.close()
 
@@ -405,10 +559,16 @@ def get_status(source_id):
             "archive_start": ARCHIVE_STARTS.get(source_id),
             "coverage": {},
         }
+    init_db(source_id)  # ensures idx_articles_date/idx_articles_year/idx_articles_scraped_at exist -- see 2026-08-21 migration note above
     con = connect(source_id)
+    # Split from one combined query: mixing MIN/MAX(date) with MAX(scraped_at)
+    # stopped SQLite from using either index and forced a full table scan --
+    # confirmed live via EXPLAIN QUERY PLAN ("SCAN articles"). Two separate
+    # index-only queries instead of one scan.
     row = con.execute(
-        "SELECT COUNT(*) n, MIN(date) mn, MAX(date) mx, MAX(scraped_at) ls FROM articles"
+        "SELECT COUNT(*) n, MIN(date) mn, MAX(date) mx FROM articles"
     ).fetchone()
+    last_scraped = con.execute("SELECT MAX(scraped_at) FROM articles").fetchone()[0]
     coverage_rows = con.execute(
         "SELECT substr(date,1,4) yr, COUNT(*) n FROM articles GROUP BY yr ORDER BY yr"
     ).fetchall()
@@ -419,7 +579,7 @@ def get_status(source_id):
         "count":         row["n"],
         "min_date":      row["mn"],
         "max_date":      row["mx"],
-        "last_scraped":  row["ls"],
+        "last_scraped":  last_scraped,
         "size_mb":       round(size, 1),
         "archive_start": ARCHIVE_STARTS.get(source_id),
         "coverage":      {r["yr"]: r["n"] for r in coverage_rows},

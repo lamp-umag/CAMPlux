@@ -1,6 +1,6 @@
-# Deploying CAMPlux to a shared host
+# Deploying camplux to a shared host
 
-This is for running CAMPlux continuously on a machine other than your own
+This is for running camplux continuously on a machine other than your own
 laptop (e.g. `lamp-compute-01`), reachable remotely, instead of the
 `python run.py` / Beacon flow in the main README (which is built for
 interactive local use on your own machine).

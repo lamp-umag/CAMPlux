@@ -32,11 +32,26 @@ class WordPressScraper(BaseScraper):
         base_url       — site root (no trailing slash)
         min_delay      — respects robots.txt Crawl-delay
         use_browser_ua — set True if the site blocks non-browser User-Agents
+        use_embed      — set False if the site 403s _embed lookups for
+                          anonymous requests (see redhoy.py: a custom
+                          "rh_rest_embed_blocked" plugin rejects _embed
+                          entirely for non-authenticated callers, even
+                          though the plain /posts endpoint works fine).
+                          When False, author/image_url are left blank --
+                          the featured_media id and numeric author id are
+                          still fetchable individually, but that's a lot of
+                          extra per-post requests for fields that are
+                          nice-to-have, not core; not worth it for one
+                          source of this size.
     """
     name = "WordPress Site"
     base_url = ""
     min_delay = 1.0
     use_browser_ua = False
+    use_embed = True
+    per_page = 100  # override per-source if the site's server can't handle
+                     # a full page of _embed lookups within our 30s request
+                     # timeout -- see ovejeronoticias.py
 
     def __init__(self):
         super().__init__()
@@ -71,10 +86,11 @@ class WordPressScraper(BaseScraper):
         categories = self._fetch_categories(actual_delay)
 
         params = {
-            "per_page": 100,
+            "per_page": self.per_page,
             "_fields":  FIELDS,
-            "_embed":   "wp:featuredmedia,author",
         }
+        if self.use_embed:
+            params["_embed"] = "wp:featuredmedia,author"
         if query:
             params["search"] = query
         if date_from:
@@ -198,6 +214,11 @@ class WordPressScraper(BaseScraper):
         """Sweeps every post for (url, author) only -- tiny payload per page
         (no content/excerpt) -- for backfilling the author column on rows
         that predate the author fix, without a full re-scrape."""
+        if not self.use_embed:
+            yield {"type": "log", "level": "warn",
+                   "msg": "  Este sitio bloquea _embed para anónimos "
+                          "(use_embed=False) -- author backfill no disponible."}
+            return
         actual_delay = max(delay, self.min_delay)
         params = {
             "per_page": 100,

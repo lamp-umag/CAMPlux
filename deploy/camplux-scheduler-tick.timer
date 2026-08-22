@@ -1,5 +1,5 @@
 [Unit]
-Description=Check for due CAMPlux one-off scheduled runs every 10 minutes
+Description=Check for due camplux one-off scheduled runs every 10 minutes
 
 [Timer]
 OnBootSec=2min

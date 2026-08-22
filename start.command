@@ -1,5 +1,5 @@
 #!/bin/bash
-# CAMPlux launcher — macOS / Linux
+# camplux launcher — macOS / Linux
 # Double-click this file (after `chmod +x start.command` once) to bootstrap
 # (.venv + deps) and start the suite via Beacon.
 

@@ -57,6 +57,116 @@ SOURCE_GROUPS = {
         "label": "Otras regiones",
         "sources": ["ladiscusion"],
     },
+    # ── National expansion, region by region, smallest population first ──────
+    # (Censo 2024 order) -- see deploy/expansion/PLAN.md for the whole
+    # campaign plan and deploy/expansion/STATUS.md for live progress.
+    "aysen": {
+        "label": "Aysén",
+        "sources": [
+            "diarioaysen", "canalsurpatagonia",
+            "radiosantamaria", "rln",
+        ],
+    },
+    "arica_parinacota": {
+        "label": "Arica y Parinacota",
+        "sources": [
+            "aricahoy", "aricaldia", "elmorrodearica", "cappissimamultimedial",
+        ],
+    },
+    "atacama": {
+        "label": "Atacama",
+        "sources": [
+            "atacamanoticias", "chanarcillo", "tierramarillano",
+            "hvaradio", "atacamaenlinea", "madero",
+        ],
+    },
+    "tarapaca": {
+        "label": "Tarapacá",
+        "sources": [
+            "diariolongino", "iquiquetv", "iquiquealdia",
+            "radiopaulina", "rtccormudesi",
+        ],
+    },
+    "los_rios": {
+        "label": "Los Ríos",
+        "sources": [
+            "radioaustralvaldivia", "losriosaldia", "periodicolosrios",
+            "noticiaslosrios", "rioenlinea", "diarioelranco",
+        ],
+    },
+    "nuble": {
+        "label": "Ñuble",
+        "sources": [
+            "nubleonline", "nubleactual", "lafontana", "quirihuenoticias",
+            "radiocontacto", "radionuble",
+        ],
+    },
+    "antofagasta": {
+        "label": "Antofagasta",
+        "sources": [
+            "diarioantofagasta", "regionalista", "radionuevomundo",
+        ],
+    },
+    "coquimbo": {
+        "label": "Coquimbo",
+        "sources": [
+            "ovallehoy", "laserenaonline", "elcoquimbano", "elillapelino",
+            "diariochoapa", "radioriquelme",
+        ],
+    },
+    "los_lagos": {
+        "label": "Los Lagos",
+        "sources": [
+            "diarioloslagos", "chiloenews", "laopiniondechiloe",
+            "diariopuertovaras", "radiofrutillarfm",
+        ],
+    },
+    "ohiggins": {
+        "label": "O'Higgins",
+        "sources": [
+            "elrancaguino", "diarioelpulso", "radiomachali", "diariorancagua",
+            "hdn", "tribunacolchagua", "diarioelmarino", "pichilemutv",
+            "radiosantacruz",
+        ],
+    },
+    "araucania": {
+        "label": "Araucanía",
+        "sources": [
+            "araucanianoticias", "elperiodico", "malleconoticias",
+            "angolnoticiasnew", "lasnoticiasdemalleco", "elespejodemalleco",
+            "malleco7", "villarricaldia",
+        ],
+    },
+    "maule": {
+        "label": "Maule",
+        "sources": [
+            "diariotalca", "elmauleinforma", "radiochilenadelmaule",
+            "diarioelcentro", "cronicanoticias", "diariolinares",
+            "diariocauquenes", "linaresenlinea", "cauquenesnet",
+        ],
+    },
+    "biobio": {
+        "label": "Biobío",
+        "sources": [
+            "bionoticias", "elcontraste", "diarioprovincial", "araucovision",
+        ],
+    },
+    "valparaiso": {
+        "label": "Valparaíso",
+        "sources": [
+            "observador", "g5noticias", "diariolaquinta", "epicentrochile",
+            "elaconcagua", "elproa",
+        ],
+    },
+    "metropolitana": {
+        "label": "Región Metropolitana",
+        "sources": [
+            "elcomunicador", "diarioellabrador", "portaldemelipilla",
+            "puentealtoaldia", "puentealtonline", "portalpuentealto",
+            "redhoy", "lavozdemaipu", "labatalla", "noticiasdelsol",
+            "delh", "portalmetropolitano",
+        ],
+    },
     "internacional": {
         "label": "Internacional",
         "sources": [
@@ -72,13 +182,38 @@ SOURCES = (
     SOURCE_GROUPS["magallanes"]["sources"]
     + SOURCE_GROUPS["nacional"]["sources"]
     + SOURCE_GROUPS["regional"]["sources"]
+    + SOURCE_GROUPS["aysen"]["sources"]
+    + SOURCE_GROUPS["arica_parinacota"]["sources"]
+    + SOURCE_GROUPS["atacama"]["sources"]
+    + SOURCE_GROUPS["tarapaca"]["sources"]
+    + SOURCE_GROUPS["los_rios"]["sources"]
+    + SOURCE_GROUPS["nuble"]["sources"]
+    + SOURCE_GROUPS["antofagasta"]["sources"]
+    + SOURCE_GROUPS["coquimbo"]["sources"]
+    + SOURCE_GROUPS["los_lagos"]["sources"]
+    + SOURCE_GROUPS["ohiggins"]["sources"]
+    + SOURCE_GROUPS["araucania"]["sources"]
+    + SOURCE_GROUPS["maule"]["sources"]
+    + SOURCE_GROUPS["biobio"]["sources"]
+    + SOURCE_GROUPS["valparaiso"]["sources"]
+    + SOURCE_GROUPS["metropolitana"]["sources"]
 )
 
-# Explorer, for now, only surfaces Magallanes press -- excludes "nacional",
-# "regional" (other regions), and "internacional". User request
-# 2026-08-11, scoped to /explore only; scraping/archiving still covers
-# all of SOURCES. Revert by setting this back to SOURCES.
-EXPLORE_SOURCES = tuple(SOURCE_GROUPS["magallanes"]["sources"])
+# Explorer originally scoped to Magallanes-only (2026-08-11 user request,
+# back when Magallanes was the only developed region). Widened 2026-08-22
+# as the national expansion campaign (see deploy/expansion/) landed real
+# sources in 10+ other regions -- excluding them from search/CSV export
+# would leave 45+ new sources invisible to the one UI meant to surface this
+# content. Excludes only "internacional" (non-Chilean press, a different
+# kind of corpus, mixing it into "search the whole archive" by default
+# would be surprising) -- everything else (regional expansion + nacional +
+# the legacy "regional" bucket) is in scope and grows automatically as
+# more regions get added, no manual update needed per region.
+EXPLORE_SOURCES = tuple(
+    sid for group_key, info in SOURCE_GROUPS.items()
+    if group_key != "internacional"
+    for sid in info["sources"]
+)
 
 SOURCE_NAMES = {
     # Magallanes
@@ -102,6 +237,114 @@ SOURCE_NAMES = {
     "cnnchile":      "CNN Chile",
     # Regiones
     "ladiscusion":   "La Discusión",
+    # Aysén (national expansion, see deploy/expansion/)
+    "diarioaysen":       "Diario Aysén",
+    "canalsurpatagonia": "Canal Sur Patagonia",
+    "radiosantamaria":   "Radio Santa María",
+    "rln":               "Radio Las Nieves",
+    # Arica y Parinacota (national expansion)
+    "aricahoy":              "Arica Hoy",
+    "aricaldia":             "Arica al Día",
+    "elmorrodearica":        "El Morro de Arica",
+    "cappissimamultimedial": "Cappissima Multimedial",
+    # Atacama (national expansion)
+    "atacamanoticias":  "Atacama Noticias",
+    "chanarcillo":      "Diario Chañarcillo",
+    "tierramarillano":  "Tierramarillano",
+    "hvaradio":         "HVA Radio",
+    "atacamaenlinea":   "Atacama en Línea",
+    "madero":           "Madero",
+    # Tarapacá (national expansion)
+    "diariolongino": "Diario El Longino",
+    "iquiquetv":     "Iquique TV",
+    "iquiquealdia":  "Iquique al Día",
+    "radiopaulina":  "Radio Paulina",
+    "rtccormudesi":  "RTC Televisión (CORMUDESI)",
+    # Los Ríos (national expansion)
+    "radioaustralvaldivia": "Radio Austral Valdivia",
+    "losriosaldia":         "Los Ríos al Día",
+    "periodicolosrios":     "Periódico Los Ríos",
+    "noticiaslosrios":      "Noticias Los Ríos",
+    "rioenlinea":           "Río en Línea",
+    "diarioelranco":        "Diario El Ranco",
+    # Ñuble (national expansion)
+    "nubleonline":       "Ñuble Online",
+    "nubleactual":       "Ñuble Actual",
+    "lafontana":         "La Fontana",
+    "quirihuenoticias":  "Quirihue Noticias",
+    "radiocontacto":     "Radio Contacto 90.7 FM",
+    "radionuble":        "Radio Ñuble",
+    # Antofagasta (national expansion)
+    "diarioantofagasta": "El Diario de Antofagasta",
+    "regionalista":      "Diario Regionalista Antofagasta",
+    "radionuevomundo":   "Radio Nuevo Mundo",
+    # Coquimbo (national expansion)
+    "ovallehoy":       "Ovalle Hoy",
+    "laserenaonline":  "La Serena Online",
+    "elcoquimbano":    "El Coquimbano",
+    "elillapelino":    "El Illapelino",
+    "diariochoapa":    "Diario Choapa",
+    "radioriquelme":   "Radio Riquelme",
+    # Los Lagos (national expansion)
+    "diarioloslagos":    "Diario Digital Los Lagos",
+    "chiloenews":        "ChiloeNews",
+    "laopiniondechiloe": "La Opinión de Chiloé",
+    "diariopuertovaras": "Diario Puerto Varas",
+    "radiofrutillarfm":  "Radio Frutillar FM 96.7",
+    # O'Higgins (national expansion)
+    "elrancaguino":     "El Rancagüino",
+    "diarioelpulso":    "Diario El Pulso",
+    "radiomachali":     "Radio Machalí",
+    "diariorancagua":   "Diario Rancagua",
+    "hdn":              "HDN Digital",
+    "tribunacolchagua": "Tribuna Colchagua",
+    "diarioelmarino":   "El Marino",
+    "pichilemutv":      "PichilemuTV",
+    "radiosantacruz":   "Radio Santa Cruz",
+    # Araucanía (national expansion)
+    "araucanianoticias":   "Araucanía Noticias",
+    "elperiodico":         "El Periódico",
+    "malleconoticias":     "Malleco Noticias",
+    "angolnoticiasnew":    "Angol Noticias",
+    "lasnoticiasdemalleco":"Las Noticias de Malleco",
+    "elespejodemalleco":   "El Espejo de Malleco",
+    "malleco7":            "Malleco 7",
+    "villarricaldia":      "Villarrica al Día",
+    # Maule (national expansion)
+    "diariotalca":          "Diario Talca",
+    "elmauleinforma":       "El Maule Informa",
+    "radiochilenadelmaule": "Radio Chilena del Maule",
+    "diarioelcentro":       "Diario El Centro",
+    "cronicanoticias":      "Crónica Noticias",
+    "diariolinares":        "Diario Linares",
+    "diariocauquenes":      "Diario Cauquenes",
+    "linaresenlinea":       "Linares en Línea",
+    "cauquenesnet":         "CauquenesNet",
+    # Biobío (national expansion)
+    "bionoticias":     "Bionoticias.cl",
+    "elcontraste":     "El Contraste",
+    "diarioprovincial":"Diario Provincial",
+    "araucovision":    "Araucovisión",
+    # Valparaíso (national expansion)
+    "observador":     "El Observador",
+    "g5noticias":     "G5 Noticias",
+    "diariolaquinta": "Diario La Quinta",
+    "epicentrochile": "Epicentro Chile",
+    "elaconcagua":    "El Aconcagua",
+    "elproa":         "El Proa",
+    # Región Metropolitana (national expansion)
+    "elcomunicador":     "El Comunicador",
+    "diarioellabrador":  "Diario El Labrador",
+    "portaldemelipilla": "Portal de Melipilla",
+    "puentealtoaldia":   "Puente Alto Al Día",
+    "puentealtonline":   "Puente Altonline",
+    "portalpuentealto":  "Portal Puente Alto",
+    "redhoy":            "RedHoy",
+    "lavozdemaipu":      "La Voz de Maipú",
+    "labatalla":         "La Batalla de Maipú",
+    "noticiasdelsol":    "Noticias del Sol",
+    "delh":              "El Amanecer de lo Herrera",
+    "portalmetropolitano": "Portal Metropolitano",
     # Internacional
     "techcrunch":        "TechCrunch",
     "variety":           "Variety",
@@ -119,6 +362,14 @@ DISABLED_SOURCES = {
         "url":    "elmagallanews.cl",
         "region": "magallanes",
         "reason": "Crawl-delay 300 s en robots.txt. Sin API. No viable.",
+    },
+    "diariodeaysen": {
+        "name":   "Diario de Aysén",
+        "url":    "diariodeaysen.cl",
+        "region": "aysen",
+        "reason": "WP REST API responde, pero el sitio solo tiene el post "
+                   "placeholder \"Hello World\" -- instalación nueva/en "
+                   "construcción, sin contenido real. Revisar más adelante.",
     },
     "meganoticias": {
         "name":   "Meganoticias",
@@ -195,13 +446,13 @@ DISABLED_SOURCES = {
     "elsur": {
         "name":   "El Sur",
         "url":    "elsur.cl",
-        "region": "regional",
+        "region": "biobio",
         "reason": "CMS propio sin WP API confirmada",
     },
     "mercuriovalpo": {
         "name":   "El Mercurio de Valparaíso",
         "url":    "mercuriovalpo.cl",
-        "region": "regional",
+        "region": "valparaiso",
         "reason": "Grupo El Mercurio, CMS propietario",
     },
     "australtemuco": {
@@ -240,6 +491,325 @@ DISABLED_SOURCES = {
         "url":    "ellanquihue.cl",
         "region": "regional",
         "reason": "Sin WP REST API. Pendiente scraper sitemap.",
+    },
+    # ── Los Ríos (national expansion) ─────────────────────────────────────────
+    "noticiasriobueno": {
+        "name":   "NoticiasRioBueno.com",
+        "url":    "noticiasriobueno.com",
+        "region": "los_rios",
+        "reason": "WP REST API responde, pero robots.txt especifica "
+                   "Crawl-delay: 3600 (1 hora) -- 12x peor que el precedente "
+                   "elmagallanews (300s) ya descartado. No viable.",
+    },
+    # These 10 domains were flagged "yes (API live)" in the phase-1 census
+    # (2026-08-22) but live re-verification during phase 2 (same day) found
+    # /wp-json/wp/v2/posts returns plain HTML (200, text/html), not JSON,
+    # and none of their homepages have any wp-content/wp-json markers --
+    # they all share a different, non-WordPress proprietary CMS (robots.txt
+    # has /base/printadv/, /estadset/, /base/clima.php -- not WP paths).
+    # See regions/los-rios.md's phase 2 section for the full investigation.
+    "diariodevaldivia": {
+        "name":   "Diario de Valdivia",
+        "url":    "diariodevaldivia.cl",
+        "region": "los_rios",
+        "reason": "Census marcó \"API live\" pero /wp-json no es WordPress "
+                   "real (devuelve HTML, no JSON) -- CMS propietario "
+                   "compartido con la red Diario Futrono. Ver los-rios.md.",
+    },
+    "diariofutrono": {
+        "name":   "Diario Futrono",
+        "url":    "diariofutrono.cl",
+        "region": "los_rios",
+        "reason": "No es WordPress real pese al hallazgo del censo -- ver "
+                   "los-rios.md.",
+    },
+    "diariodepanguipulli": {
+        "name":   "Diario de Panguipulli",
+        "url":    "diariodepanguipulli.cl",
+        "region": "los_rios",
+        "reason": "No es WordPress real pese al hallazgo del censo -- ver "
+                   "los-rios.md.",
+    },
+    "diarioriobueno": {
+        "name":   "Diario Río Bueno",
+        "url":    "diarioriobueno.cl",
+        "region": "los_rios",
+        "reason": "No es WordPress real pese al hallazgo del censo -- ver "
+                   "los-rios.md.",
+    },
+    "diariolaunion": {
+        "name":   "Diario La Unión",
+        "url":    "diariolaunion.cl",
+        "region": "los_rios",
+        "reason": "No es WordPress real pese al hallazgo del censo -- ver "
+                   "los-rios.md.",
+    },
+    "diariopaillaco": {
+        "name":   "Diario Paillaco",
+        "url":    "diariopaillaco.cl",
+        "region": "los_rios",
+        "reason": "No es WordPress real pese al hallazgo del censo -- ver "
+                   "los-rios.md.",
+    },
+    "diariocorral": {
+        "name":   "Diario Corral",
+        "url":    "diariocorral.cl",
+        "region": "los_rios",
+        "reason": "No es WordPress real pese al hallazgo del censo -- ver "
+                   "los-rios.md.",
+    },
+    "diariolagoranco": {
+        "name":   "Diario Lago Ranco",
+        "url":    "diariolagoranco.cl",
+        "region": "los_rios",
+        "reason": "No es WordPress real pese al hallazgo del censo -- ver "
+                   "los-rios.md.",
+    },
+    "diariolaguino": {
+        "name":   "Diario Laguino",
+        "url":    "diariolaguino.cl",
+        "region": "los_rios",
+        "reason": "No es WordPress real pese al hallazgo del censo -- ver "
+                   "los-rios.md.",
+    },
+    "diariomafil": {
+        "name":   "Diario Máfil",
+        "url":    "diariomafil.cl",
+        "region": "los_rios",
+        "reason": "No es WordPress real pese al hallazgo del censo -- ver "
+                   "los-rios.md.",
+    },
+    # ── Ñuble (national expansion) ────────────────────────────────────────────
+    "orbitanoticias": {
+        "name":   "Órbita Noticias",
+        "url":    "orbitanoticias.cl",
+        "region": "nuble",
+        "reason": "Censo marcó \"API live\" pero re-verificación en vivo "
+                   "(2026-08-22) encontró que el sitio entero -- home y "
+                   "wp-json por igual -- responde HTTP 200 con cuerpo "
+                   "completamente vacío (content-length: 0), sin importar el "
+                   "User-Agent. No es un bloqueo de API, es el servidor "
+                   "entero devolviendo nada. No viable.",
+    },
+    # ── Antofagasta (national expansion) ──────────────────────────────────────
+    "nuevonortefm": {
+        "name":   "Nuevo Norte FM",
+        "url":    "nuevonortefm.cl",
+        "region": "antofagasta",
+        "reason": "Censo marcó \"API live\" y la API en efecto responde, "
+                   "pero re-verificación en vivo (2026-08-22) encontró que "
+                   "todo el contenido indexado (8 posts) es texto de "
+                   "demostración de un tema WordPress (Gavias) -- \"¡Hola, "
+                   "mundo!\" más posts de relleno sobre \"Awwwards\" y "
+                   "\"entrepreneur & ceo\", uno con guid apuntando a "
+                   "gaviaspreview.com. Nunca se publicó contenido real. No "
+                   "viable.",
+    },
+    # ── Coquimbo (national expansion) ─────────────────────────────────────────
+    "miradiols": {
+        "name":   "Mi Radio LS",
+        "url":    "miradiols.cl",
+        "region": "coquimbo",
+        "reason": "Censo marcó \"API live\" pero robots.txt tiene "
+                   "explícitamente \"Disallow: /wp-json/\" para User-agent: "
+                   "* (bloque Yoast) -- el propio sitio prohíbe el acceso a "
+                   "la ruta que necesitamos, pese a que la API responde si "
+                   "se ignora robots.txt. No viable.",
+    },
+    # ── Los Lagos (national expansion) ────────────────────────────────────────
+    "radiosago": {
+        "name":   "Radio Sago",
+        "url":    "radiosago.cl",
+        "region": "los_lagos",
+        "reason": "WP REST API responde HTTP 401 \"rest_login_required\" -- "
+                   "bloqueada para usuarios no autenticados. No viable.",
+    },
+    "diariodeosorno": {
+        "name":   "Diario de Osorno",
+        "url":    "diariodeosorno.cl",
+        "region": "los_lagos",
+        "reason": "Censo marcó \"API live\" pero re-verificación en vivo "
+                   "(2026-08-22) encontró que /wp-json/ devuelve el HTML de "
+                   "la portada (200, text/html), no JSON -- no es "
+                   "WordPress, es el mismo CMS propietario \"Grupo "
+                   "DiarioSur\" que El Llanquihue (ya deshabilitado arriba, "
+                   "región \"regional\"). No viable.",
+    },
+    # diariolaguino.cl (censused here as "Diario Laguino") is NOT a Los
+    # Lagos region outlet -- it's the same domain already investigated and
+    # disabled under the "los_rios" key above ("Los Lagos" comuna in Los
+    # Ríos region, near Valdivia, not this region). Census
+    # cross-contamination from the shared name, not re-added here. See
+    # regions/los-lagos.md.
+    # ── O'Higgins (national expansion) ────────────────────────────────────────
+    "eltipografo": {
+        "name":   "El Tipógrafo",
+        "url":    "eltipografo.cl",
+        "region": "ohiggins",
+        "reason": "Censo marcó \"API live\" pero re-verificación en vivo "
+                   "(2026-08-22) encontró que es una SPA Angular servida "
+                   "desde AWS API Gateway/CloudFront (\"ng-version\" en el "
+                   "HTML, \"x-powered-by: Express\"), no WordPress -- "
+                   "/wp-json/ devuelve la misma cáscara HTML que cualquier "
+                   "otra ruta. No viable.",
+    },
+    "rancaguatv": {
+        "name":   "Rancagua TV",
+        "url":    "rancaguatv.cl",
+        "region": "ohiggins",
+        "reason": "Censo marcó \"API live\" pero re-verificación en vivo "
+                   "(2026-08-22) encontró que /wp-json/wp/v2/posts devuelve "
+                   "HTML (200, text/html), no JSON -- la misma cáscara que "
+                   "la portada, sin marcadores wp-content en ninguna "
+                   "parte. No viable.",
+    },
+    "elrancahuaso": {
+        "name":   "El Rancahuaso",
+        "url":    "elrancahuaso.cl",
+        "region": "ohiggins",
+        "reason": "Censo marcó \"no\" (WordPress) -- /wp-json/ devuelve "
+                   "404 tras redirect. CMS propio, no re-investigado más "
+                   "a fondo (fuera del alcance de esta pasada, que solo "
+                   "re-verificó los \"yes (API live)\").",
+    },
+    "diarioviregion": {
+        "name":   "Diario Sexta Región Online",
+        "url":    "diarioviregion.cl",
+        "region": "ohiggins",
+        "reason": "Censo lo marcó \"inconclusive\" (403 en la portada). "
+                   "Re-verificación en vivo (2026-08-22) confirmó CMS "
+                   "Joomla (rutas /media/jui/ de Joomla UI), bloqueado por "
+                   "Cloudflare (\"Malware detected\") incluso antes de "
+                   "llegar a cualquier ruta de contenido. No es WordPress, "
+                   "no viable.",
+    },
+    "pichilemunews": {
+        "name":   "PichilemuNews",
+        "url":    "pichilemunews.cl",
+        "region": "ohiggins",
+        "reason": "Censo marcó \"API locked\" -- confirmado en vivo "
+                   "2026-08-22: /wp-json/wp/v2/posts devuelve HTTP 403 "
+                   "\"No tienes autorización para llevar a cabo esta "
+                   "acción\" (WordPress deshabilitó explícitamente la "
+                   "REST API). No viable.",
+    },
+    # ── Araucanía (national expansion) ────────────────────────────────────────
+    "radioaraucana": {
+        "name":   "Radio Araucana",
+        "url":    "radioaraucana.cl",
+        "region": "araucania",
+        "reason": "Censo marcó \"API locked\" -- confirmado en vivo "
+                   "2026-08-22: /wp-json/wp/v2/posts devuelve HTTP 403 "
+                   "Forbidden (Cloudflare). No viable.",
+    },
+    "redinformativa": {
+        "name":   "Red Informativa (Villarrica)",
+        "url":    "radio.redinformativa.cl",
+        "region": "araucania",
+        "reason": "Censo marcó \"API live\" -- la API en efecto responde "
+                   "200 pero /wp-json/wp/v2/posts tiene X-WP-Total 0: el "
+                   "sitio publica sus noticias reales bajo un post type "
+                   "personalizado de JetEngine (\"jet-engine\"/\"Listing "
+                   "Items\"), no bajo el post type nativo de WordPress. No "
+                   "es un caso de instalación vacía, es un modelo de "
+                   "contenido no estándar -- necesitaría un scraper a "
+                   "medida (como radiopolar.py) para ser viable; no "
+                   "justifica la inversión para una sola radio ya cubierta "
+                   "indirectamente por otros medios de Villarrica/Pucón en "
+                   "esta región.",
+    },
+    "noticiasdellago": {
+        "name":   "Noticias del Lago",
+        "url":    "noticiasdellago.cl",
+        "region": "araucania",
+        "reason": "Censo lo listó como medio propio, pero re-verificación "
+                   "en vivo (2026-08-22) encontró que el dominio "
+                   "redirecciona (301) directamente a araucanianoticias.cl "
+                   "-- no es un medio distinto, es el mismo Araucanía "
+                   "Noticias bajo otro dominio/alias. Ya cubierto por "
+                   "\"araucanianoticias\", no se registra por separado.",
+    },
+    "puconradio": {
+        "name":   "Pucón Radio",
+        "url":    "puconradio.cl",
+        "region": "araucania",
+        "reason": "Censo marcó \"API live\" pero re-verificación en vivo "
+                   "(2026-08-22) encontró un frontend Next.js "
+                   "(\"x-powered-by: Next.js\") que devuelve HTML incluso "
+                   "en /wp-json/wp/v2/posts -- no hay REST API de "
+                   "WordPress accesible en esa ruta. Requeriría un scraper "
+                   "a medida (como radiopolar.py); no se investigó más a "
+                   "fondo por ahora, no justifica la inversión para una "
+                   "sola radio.",
+    },
+    # ── Maule (national expansion) ────────────────────────────────────────────
+    "tv5": {
+        "name":   "TV5 Linares",
+        "url":    "tv5.cl",
+        "region": "maule",
+        "reason": "Censo marcó \"API live\" pero re-verificación en vivo "
+                   "(2026-08-22) encontró un frontend Next.js "
+                   "(\"__NEXT_DATA__\" en el HTML, sitemaps dedicados de "
+                   "Google News) -- no es WordPress, /wp-json/ no existe en "
+                   "esa ruta. Requeriría un scraper a medida (como "
+                   "radiopolar.py); no se investigó más a fondo, no "
+                   "justifica la inversión para un solo canal.",
+    },
+    # ── Biobío (national expansion) ───────────────────────────────────────────
+    "radiollacolen": {
+        "name":   "Radio Llacolén",
+        "url":    "radiollacolen.com",
+        "region": "biobio",
+        "reason": "Censo marcó \"API live\" pero con 0 posts en la "
+                   "consulta -- confirmado en vivo 2026-08-22: X-WP-Total "
+                   "0 en el tipo de contenido nativo \"post\", y "
+                   "/wp-json/wp/v2/types no expone ningún post type "
+                   "personalizado con contenido de noticias (solo post, "
+                   "page, attachment, y tipos internos de Elementor). "
+                   "Instalación WordPress vacía -- sin contenido real que "
+                   "archivar. No viable.",
+    },
+    # ── Valparaíso (national expansion) ───────────────────────────────────────
+    "portalesfm": {
+        "name":   "Radio Portales de Valparaíso",
+        "url":    "portalesfm.cl",
+        "region": "valparaiso",
+        "reason": "Censo marcó \"API live\" y la API en efecto responde, "
+                   "pero re-verificación en vivo (2026-08-22) encontró que "
+                   "los 78 posts indexados son en realidad reproducciones "
+                   "de canciones (\"El Deluki - Solito Los 2\", \"Casandra "
+                   "Paz - La Vida me Trajo Hasta Aquí\"), todos bajo la "
+                   "categoría \"scroll\" -- la categoría \"actualidad\" "
+                   "(noticias) existe pero tiene 0 posts. Es un log de "
+                   "reproducción musical, no contenido editorial de "
+                   "noticias. No viable.",
+    },
+    # ── Región Metropolitana (national expansion) ──────────────────────────────
+    "duplos": {
+        "name":   "Duplos",
+        "url":    "duplos.cl",
+        "region": "metropolitana",
+        "reason": "Censo lo marcó borderline (\"general-interest con "
+                   "encuadre RM\"). Re-verificación en vivo 2026-08-22 de "
+                   "sus 15 posts más recientes lo descarta: farándula "
+                   "nacional (Gala Caldirola), resultados SIMCE "
+                   "nacionales, encuesta Cadem, política nacional "
+                   "(reforma de seguridad del Gobierno), y notas "
+                   "policiales de Antofagasta/Osorno/Concepción en el "
+                   "mismo feed -- no es prensa local/comunal de la RM en "
+                   "la práctica, es un agregador nacional. No viable para "
+                   "el alcance de esta campaña.",
+    },
+    "recoletaaldia": {
+        "name":   "Recoleta al Día",
+        "url":    "recoleta.cl/diario-digital-recoleta-al-dia",
+        "region": "metropolitana",
+        "reason": "Boletín digital oficial de la Municipalidad de "
+                   "Recoleta, no un medio de prensa independiente -- "
+                   "fuera del alcance de esta campaña (mismo criterio "
+                   "aplicado a sitios de gobiernos municipales en otras "
+                   "regiones). Incluido solo por completitud, ver "
+                   "metropolitana.md.",
     },
 }
 
@@ -563,17 +1133,24 @@ def archive():
         jpath = os.path.join(jobs_dir, f"yene_{source_id}_{jid}.json")
         with open(jpath, "w", encoding="utf-8") as jf:
             json.dump(job_meta, jf, ensure_ascii=False, indent=2)
-        yield _sse({
-            "type":     "done",
-            "seen":     total_seen,
-            "saved":    total_saved,
-            "total_db": status["count"],
-            "min_date": status["min_date"],
-            "max_date": status["max_date"],
-            "size_mb":  status["size_mb"],
-            "coverage": status["coverage"],
-            "job_status": job_status,
-        })
+        # A generator must not yield again after GeneratorExit was raised into
+        # it (Python enforces this -- yielding here throws "generator ignored
+        # GeneratorExit", confirmed live 2026-08-22 when a disconnected client
+        # left ovejeronoticias's job crashing at cleanup instead of exiting
+        # cleanly). The client that triggered "stopped" is already gone, so
+        # there's nothing to yield to anyway -- db writes above still ran.
+        if job_status != "stopped":
+            yield _sse({
+                "type":     "done",
+                "seen":     total_seen,
+                "saved":    total_saved,
+                "total_db": status["count"],
+                "min_date": status["min_date"],
+                "max_date": status["max_date"],
+                "size_mb":  status["size_mb"],
+                "coverage": status["coverage"],
+                "job_status": job_status,
+            })
 
     return Response(
         stream_with_context(generate()),

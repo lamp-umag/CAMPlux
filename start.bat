@@ -1,5 +1,5 @@
 @echo off
-REM CAMPlux launcher — Windows
+REM camplux launcher — Windows
 REM Double-click this file to bootstrap (.venv + deps) and start the suite.
 
 cd /d "%~dp0"

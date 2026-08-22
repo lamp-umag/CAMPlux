@@ -10,7 +10,7 @@ import sys
 import time
 import concurrent.futures as cf
 
-sys.path.insert(0, "/home/mnx/CAMPlux/vault")
+sys.path.insert(0, "/home/mnx/camplux/vault")
 from scrapers.elpinguino import ElPinguinoScraper, build_url
 
 N_URLS = 20

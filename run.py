@@ -1,5 +1,5 @@
 """
-CAMPlux bootstrapper.
+camplux bootstrapper.
 
 Creates a local .venv if missing, installs all module dependencies, then runs
 launcher.py (Beacon). Cross-platform (Mac / Linux / Windows). Designed to be
@@ -71,7 +71,7 @@ def launch():
     py = venv_python()
     print()
     print("=" * 50)
-    print("Iniciando CAMPlux…")
+    print("Iniciando camplux…")
     print("=" * 50)
     try:
         subprocess.call([str(py), str(HERE / "launcher.py")])
@@ -81,7 +81,7 @@ def launch():
 
 def main():
     force = "--reinstall" in sys.argv
-    print("🐾 CAMPlux")
+    print("🐾 camplux")
     print(f"  cwd: {HERE}")
     try:
         ensure_venv()

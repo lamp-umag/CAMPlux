@@ -1,5 +1,5 @@
 [Unit]
-Description=Run CAMPlux Vault's incremental archive update nightly
+Description=Run camplux Vault's incremental archive update nightly
 
 [Timer]
 # Local time, not UTC -- systemd resolves OnCalendar against the system
