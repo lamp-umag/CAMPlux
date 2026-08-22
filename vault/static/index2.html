@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>camplux</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #12172a;
+    --surface2: #1a2138;
+    --surface3: #222b47;
+    --border: #232d4a;
+    --accent: #4f8fe8;
+    --accent-dim: #2e5faa;
+    --text: #dbe4f5;
+    --muted: #7488ab;
+    --muted2: #536186;
+    --ok: #3fbf7f;
+    --warn: #e0b23f;
+    --err: #e2586b;
+    --radius: 14px;
+    --radius-sm: 9px;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.45;
+    -webkit-tap-highlight-color: transparent;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  button, input, select { font-family: inherit; font-size: inherit; color: inherit; }
+  button { cursor: pointer; }
+
+  /* ── layout shell ─────────────────────────────────────────────────────── */
+  #app { max-width: 780px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+
+  header.top {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(10,14,26,0.92); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px calc(10px);
+  }
+  .brand-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .brand { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; color: var(--text); display: flex; align-items: center; gap: 7px; }
+  .brand .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+  .stats-line { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  nav.tabs {
+    display: flex; gap: 4px; margin-top: 10px;
+    background: var(--surface2); border-radius: var(--radius-sm); padding: 3px;
+  }
+  nav.tabs button {
+    flex: 1; background: transparent; border: none; padding: 9px 8px;
+    border-radius: 8px; font-weight: 600; font-size: 13.5px; color: var(--muted);
+    transition: background .15s, color .15s;
+  }
+  nav.tabs button.active { background: var(--accent); color: #fff; }
+
+  main { flex: 1; padding: 14px 16px calc(70px + var(--safe-b)); }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  footer.foot {
+    padding: 18px 16px calc(18px + var(--safe-b));
+    text-align: center; font-size: 12px; color: var(--muted2);
+    border-top: 1px solid var(--border);
+  }
+  footer.foot a { color: var(--muted); }
+  footer.foot .sep { margin: 0 8px; opacity: .5; }
+
+  /* ── search / explore ─────────────────────────────────────────────────── */
+  .search-box {
+    display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;
+  }
+  .search-row { display: flex; gap: 8px; }
+  .search-row input[type="text"] {
+    flex: 1; min-width: 0; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--radius-sm); padding: 11px 13px; font-size: 15px;
+  }
+  .search-row input[type="text"]:focus { outline: none; border-color: var(--accent); }
+  .icon-btn {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: var(--radius-sm); width: 42px; min-width: 42px; display: flex;
+    align-items: center; justify-content: center; font-size: 16px;
+  }
+  .icon-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .filters-panel {
+    display: none; gap: 8px; flex-wrap: wrap; padding: 10px 12px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  .filters-panel.open { display: flex; }
+  .filters-panel label {
+    display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted);
+  }
+  .filters-panel input[type="date"] {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 7px; padding: 6px 8px; color-scheme: dark; font-size: 13px;
+  }
+  select.region-select {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 7px; padding: 6px 8px; font-size: 13px; max-width: 100%;
+  }
+
+  .result-meta { font-size: 12.5px; color: var(--muted); margin: 4px 2px 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .result-meta .export-link { color: var(--accent); font-weight: 600; white-space: nowrap; }
+
+  .card-list { display: flex; flex-direction: column; gap: 8px; }
+  .article-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 14px; cursor: pointer; transition: border-color .12s;
+  }
+  .article-card:active { border-color: var(--accent-dim); }
+  .article-top { display: flex; gap: 8px; align-items: center; margin-bottom: 5px; flex-wrap: wrap; }
+  .pill {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    padding: 2px 7px; border-radius: 999px; background: var(--surface3); color: var(--muted);
+    white-space: nowrap;
+  }
+  .pill.date { background: transparent; color: var(--muted2); font-weight: 500; text-transform: none; padding-left: 0; }
+  .article-title { font-weight: 650; font-size: 14.5px; line-height: 1.35; color: var(--text); }
+  .article-snippet { font-size: 13px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+  .article-detail {
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+    font-size: 13.5px; color: var(--text); line-height: 1.6; display: none;
+  }
+  .article-detail.open { display: block; }
+  .article-detail img { max-width: 100%; border-radius: 9px; margin-bottom: 8px; display: block; }
+  .article-detail .meta-line { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  .article-detail .body-text { white-space: pre-wrap; max-height: 340px; overflow-y: auto; }
+  .article-detail .orig-link { display: inline-block; margin-top: 8px; font-size: 13px; font-weight: 600; }
+
+  .empty-state, .load-more-wrap { text-align: center; padding: 24px 10px; color: var(--muted); font-size: 13.5px; }
+  .load-more-wrap button {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 20px; border-radius: 999px; font-weight: 600; font-size: 13px;
+  }
+
+  /* ── sources / regions ────────────────────────────────────────────────── */
+  .filter-sources {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: var(--radius-sm); padding: 10px 13px; font-size: 14px; width: 100%;
+    margin-bottom: 12px;
+  }
+  .flagship-banner {
+    background: linear-gradient(135deg, var(--surface3), var(--surface2));
+    border: 1px solid var(--accent-dim); border-radius: var(--radius);
+    padding: 12px 14px; margin-bottom: 14px; font-size: 13px; color: var(--muted);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .flagship-banner .badge { font-size: 17px; }
+
+  .region-group { margin-bottom: 8px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+  .region-head {
+    display: flex; align-items: center; gap: 10px; padding: 13px 14px; cursor: pointer;
+    user-select: none;
+  }
+  .region-head .chevron { color: var(--muted2); font-size: 11px; transition: transform .15s; flex-shrink: 0; }
+  .region-group.open .region-head .chevron { transform: rotate(90deg); }
+  .region-head .rname { font-weight: 650; font-size: 14.5px; flex: 1; min-width: 0; }
+  .region-head .rcount { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .region-master-toggle { flex-shrink: 0; }
+
+  .region-body { display: none; padding: 0 14px 12px; }
+  .region-group.open .region-body { display: block; }
+
+  .source-row {
+    display: flex; align-items: center; gap: 10px; padding: 9px 0;
+    border-top: 1px solid var(--border);
+  }
+  .source-row:first-child { border-top: none; }
+  .health-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .health-dot.g { background: var(--ok); box-shadow: 0 0 6px rgba(63,191,127,.5); }
+  .health-dot.y { background: var(--warn); }
+  .health-dot.r { background: var(--muted2); }
+  .source-info { flex: 1; min-width: 0; cursor: pointer; }
+  .source-name { font-size: 13.5px; font-weight: 600; color: var(--text); }
+  .source-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+
+  /* toggle switch */
+  .switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
+  .switch .track {
+    position: absolute; inset: 0; background: var(--surface3); border-radius: 999px; transition: background .15s;
+  }
+  .switch .thumb {
+    position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--muted); transition: transform .15s, background .15s;
+  }
+  .switch input:checked ~ .track { background: var(--accent-dim); }
+  .switch input:checked ~ .track .thumb, .switch input:checked ~ .thumb { transform: translateX(16px); background: var(--accent); }
+
+  .disabled-section { margin-top: 18px; }
+  .disabled-section > summary {
+    cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; padding: 8px 2px;
+    list-style: none;
+  }
+  .disabled-section > summary::-webkit-details-marker { display: none; }
+  .disabled-section > summary::before { content: "▸ "; }
+  .disabled-section[open] > summary::before { content: "▾ "; }
+  .disabled-row {
+    padding: 9px 12px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); margin-top: 6px; font-size: 12.5px;
+  }
+  .disabled-row .dname { font-weight: 600; color: var(--muted); }
+  .disabled-row .dreason { color: var(--muted2); margin-top: 2px; }
+
+  .loading-msg { text-align: center; padding: 40px 10px; color: var(--muted); font-size: 13.5px; }
+
+  @media (min-width: 640px) {
+    body { font-size: 15px; }
+    .filters-panel input[type="date"], select.region-select { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header class="top">
+    <div class="brand-row">
+      <div class="brand"><span class="dot"></span>camplux</div>
+      <div class="stats-line" id="statsLine">cargando…</div>
+    </div>
+    <nav class="tabs">
+      <button data-tab="explore" class="active">🔍 Explorar</button>
+      <button data-tab="sources">📡 Fuentes</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ══════════════ EXPLORE TAB ══════════════ -->
+    <section class="view active" id="view-explore">
+      <div class="search-box">
+        <div class="search-row">
+          <input type="text" id="q" placeholder="Buscar en todo el archivo…" autocomplete="off">
+          <button class="icon-btn" id="filtersToggle" title="Filtros" aria-label="Filtros">⚙</button>
+        </div>
+        <div class="filters-panel" id="filtersPanel">
+          <label><input type="checkbox" id="titleOnly"> Solo en título</label>
+          <label>Desde <input type="date" id="dateFrom"></label>
+          <label>Hasta <input type="date" id="dateTo"></label>
+          <select class="region-select" id="regionFilter"><option value="all">Todas las regiones</option></select>
+        </div>
+      </div>
+      <div class="result-meta">
+        <span id="resultMeta">—</span>
+        <a class="export-link" id="exportLink" href="#" target="_blank">⬇ CSV</a>
+      </div>
+      <div class="card-list" id="results"></div>
+      <div class="load-more-wrap" id="loadMoreWrap" style="display:none">
+        <button id="loadMoreBtn">Cargar más</button>
+      </div>
+    </section>
+
+    <!-- ══════════════ SOURCES TAB ══════════════ -->
+    <section class="view" id="view-sources">
+      <input class="filter-sources" id="sourceFilter" type="text" placeholder="Filtrar fuentes por nombre…">
+      <div class="flagship-banner">
+        <span class="badge">🐋</span>
+        <span>Magallanes es la región insignia — cobertura completa, autor, imágenes y búsqueda. El resto se está expandiendo región por región.</span>
+      </div>
+      <div id="regionsContainer"><div class="loading-msg">Cargando fuentes…</div></div>
+      <details class="disabled-section" id="disabledSection">
+        <summary>Fuentes descartadas <span id="disabledCount"></span></summary>
+        <div id="disabledList"></div>
+      </details>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <a href="/">Panel clásico</a><span class="sep">·</span><a href="/explore">Explorador clásico</a><span class="sep">·</span><span>camplux · corpus de prensa regional</span>
+  </footer>
+</div>
+
+<script>
+'use strict';
+
+// ── population-order + display metadata for known region slugs. Anything
+// not in this map (a future region group, or "nacional"/"internacional")
+// still renders fine -- falls back to its own server-provided label and
+// sorts after every known region, alphabetically. Keeps this page from
+// breaking as the expansion campaign adds more regions.
+const REGION_META = {
+  magallanes:        { rank: -1,  kind: 'flagship' },
+  aysen:              { rank: 1,  kind: 'region' },
+  arica_parinacota:   { rank: 2,  kind: 'region' },
+  atacama:            { rank: 3,  kind: 'region' },
+  tarapaca:           { rank: 4,  kind: 'region' },
+  los_rios:           { rank: 5,  kind: 'region' },
+  nuble:              { rank: 6,  kind: 'region' },
+  antofagasta:        { rank: 7,  kind: 'region' },
+  coquimbo:           { rank: 8,  kind: 'region' },
+  los_lagos:          { rank: 9,  kind: 'region' },
+  ohiggins:           { rank: 10, kind: 'region' },
+  araucania:          { rank: 11, kind: 'region' },
+  maule:              { rank: 12, kind: 'region' },
+  biobio:             { rank: 13, kind: 'region' },
+  valparaiso:         { rank: 14, kind: 'region' },
+  region_metropolitana:{ rank: 15, kind: 'region' },
+  metropolitana:      { rank: 15, kind: 'region' },
+  rm:                 { rank: 15, kind: 'region' },
+  regional:           { rank: 90, kind: 'other', label: 'Otras regiones' },
+  nacional:           { rank: 95, kind: 'other' },
+  internacional:      { rank: 99, kind: 'other' },
+};
+
+// La Discusión is Ñuble's outlet but sits in the legacy "regional" bucket
+// server-side (registered before this campaign existed) -- fold it into
+// Ñuble's display group here rather than leaving it stranded under a
+// vague "Otras regiones" heading. Cosmetic only, doesn't touch the server.
+const REASSIGN_TO_REGION = { ladiscusion: 'nuble' };
+
+let STATUS = {}, GROUPS = {}, DISABLED = {}, NIGHTLY = {};
+let searchOffset = 0, searchTotal = 0;
+const PAGE_SIZE = 20;
+let openDetailKey = null;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+function daysAgo(dateStr) {
+  if (!dateStr) return Infinity;
+  const d = new Date(dateStr.slice(0, 10));
+  if (isNaN(d)) return Infinity;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+function healthClass(source) {
+  const days = daysAgo(source.max_date);
+  if (days === Infinity) return 'r';
+  if (days <= 10) return 'g';
+  if (days <= 45) return 'y';
+  return 'r';
+}
+
+// ── tabs ─────────────────────────────────────────────────────────────────
+$$('.tabs button').forEach(btn => btn.addEventListener('click', () => {
+  $$('.tabs button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  $$('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + btn.dataset.tab).classList.add('active');
+  localStorage.setItem('camplux2_tab', btn.dataset.tab);
+}));
+
+// ── boot ─────────────────────────────────────────────────────────────────
+async function boot() {
+  try {
+    const [statusRes, groupsRes, scheduleRes] = await Promise.all([
+      fetch('/status'), fetch('/source_groups'), fetch('/schedule/state'),
+    ]);
+    STATUS = await statusRes.json();
+    const g = await groupsRes.json();
+    GROUPS = g.groups || {};
+    DISABLED = g.disabled || {};
+    const sched = await scheduleRes.json();
+    NIGHTLY = sched.nightly_enabled || {};
+  } catch (e) {
+    $('#statsLine').textContent = 'error de conexión';
+    return;
+  }
+
+  renderStats();
+  renderRegionSelect();
+  renderSources();
+  renderDisabled();
+
+  const savedTab = localStorage.getItem('camplux2_tab');
+  if (savedTab === 'sources') {
+    $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === 'sources'));
+    $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-sources'));
+  }
+
+  runSearch(true);
+}
+
+function renderStats() {
+  const sids = Object.keys(STATUS);
+  const total = sids.reduce((sum, s) => sum + (STATUS[s].count || 0), 0);
+  const active = sids.filter(s => STATUS[s].count > 0).length;
+  const regionCount = Object.keys(GROUPS).filter(g => (REGION_META[g] || {}).kind !== 'other').length;
+  $('#statsLine').textContent =
+    `${active} fuentes · ${regionCount} regiones · ${total.toLocaleString('es-CL')} artículos`;
+}
+
+// ── sources tab ──────────────────────────────────────────────────────────
+function effectiveGroupFor(sid, groupKey) {
+  return REASSIGN_TO_REGION[sid] || groupKey;
+}
+
+function buildEffectiveGroups() {
+  // Clone GROUPS but apply REASSIGN_TO_REGION so e.g. ladiscusion shows
+  // under Ñuble instead of the legacy "regional" bucket.
+  const out = {};
+  for (const [gkey, info] of Object.entries(GROUPS)) {
+    for (const sid of info.sources) {
+      const eg = effectiveGroupFor(sid, gkey);
+      if (!out[eg]) {
+        out[eg] = { label: (GROUPS[eg] && GROUPS[eg].label) || info.label, sources: [] };
+      }
+      out[eg].sources.push(sid);
+    }
+  }
+  return out;
+}
+
+function renderSources() {
+  const groups = buildEffectiveGroups();
+  const order = Object.keys(groups).sort((a, b) => {
+    const ra = (REGION_META[a] || {}).rank ?? 50;
+    const rb = (REGION_META[b] || {}).rank ?? 50;
+    if (ra !== rb) return ra - rb;
+    return a.localeCompare(b);
+  });
+
+  const savedOpen = JSON.parse(localStorage.getItem('camplux2_open_regions') || '["magallanes"]');
+  const container = $('#regionsContainer');
+  container.innerHTML = '';
+
+  for (const gkey of order) {
+    const info = groups[gkey];
+    if (!info || !info.sources.length) continue;
+    const meta = REGION_META[gkey] || {};
+    const label = meta.label || info.label || gkey;
+
+    const activeCount = info.sources.filter(sid => NIGHTLY[sid] !== false).length;
+    const el = document.createElement('div');
+    el.className = 'region-group' + (savedOpen.includes(gkey) ? ' open' : '');
+    el.dataset.group = gkey;
+    el.innerHTML = `
+      <div class="region-head">
+        <span class="chevron">▶</span>
+        <span class="rname">${esc(label)}</span>
+        <span class="rcount">${activeCount}/${info.sources.length} activas</span>
+        <label class="switch region-master-toggle" title="Activar/desactivar toda la región">
+          <input type="checkbox" ${activeCount > 0 ? 'checked' : ''} data-master="${gkey}">
+          <span class="track"><span class="thumb"></span></span>
+        </label>
+      </div>
+      <div class="region-body"></div>`;
+    const body = el.querySelector('.region-body');
+    for (const sid of info.sources) {
+      const s = STATUS[sid] || {};
+      const name = (window.SOURCE_LABELS && window.SOURCE_LABELS[sid]) || sid;
+      const enabled = NIGHTLY[sid] !== false;
+      const row = document.createElement('div');
+      row.className = 'source-row';
+      row.dataset.sid = sid;
+      const countTxt = s.exists ? `${(s.count || 0).toLocaleString('es-CL')} arts.` : 'sin datos';
+      const dateTxt = s.max_date ? `· últ. ${s.max_date}` : '';
+      row.innerHTML = `
+        <span class="health-dot ${healthClass(s)}"></span>
+        <div class="source-info" data-jump="${esc(sid)}">
+          <div class="source-name">${esc(name)}</div>
+          <div class="source-sub">${countTxt} ${dateTxt}</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" ${enabled ? 'checked' : ''} data-toggle="${esc(sid)}">
+          <span class="track"><span class="thumb"></span></span>
+        </label>`;
+      body.appendChild(row);
+    }
+    container.appendChild(el);
+  }
+
+  // region names aren't known client-side until the first /status render
+  // populates window.SOURCE_LABELS from /source_groups' sibling data --
+  // simplest: derive labels straight from STATUS's own keys isn't enough
+  // (no display name there), so pull them from the classic dashboard's
+  // known mapping via a tiny inline fetch-free trick: use sid itself if
+  // no better name is cached. Good enough as a fallback; most users will
+  // recognize the slug.
+}
+
+container_click_delegate();
+function container_click_delegate() {
+  document.addEventListener('click', async (e) => {
+    const head = e.target.closest('.region-head');
+    if (head && !e.target.closest('.switch')) {
+      const group = head.closest('.region-group');
+      group.classList.toggle('open');
+      const open = $$('.region-group.open').map(g => g.dataset.group);
+      localStorage.setItem('camplux2_open_regions', JSON.stringify(open));
+      return;
+    }
+    const jump = e.target.closest('[data-jump]');
+    if (jump) {
+      const sid = jump.dataset.jump;
+      $$('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === 'explore'));
+      $$('.view').forEach(v => v.classList.toggle('active', v.id === 'view-explore'));
+      $('#regionFilter').value = sid;
+      $('#q').value = '';
+      runSearch(true);
+      return;
+    }
+  });
+
+  document.addEventListener('change', async (e) => {
+    if (e.target.dataset.toggle) {
+      const sid = e.target.dataset.toggle;
+      const enabled = e.target.checked;
+      NIGHTLY[sid] = enabled;
+      try {
+        await fetch(`/schedule/toggle?source=${encodeURIComponent(sid)}&enabled=${enabled ? 1 : 0}`, { method: 'POST' });
+      } catch (err) { e.target.checked = !enabled; }
+      renderSources();
+    }
+    if (e.target.dataset.master) {
+      const gkey = e.target.dataset.master;
+      const groups = buildEffectiveGroups();
+      const enabled = e.target.checked;
+      const sids = (groups[gkey] || {}).sources || [];
+      await Promise.all(sids.map(sid => {
+        NIGHTLY[sid] = enabled;
+        return fetch(`/schedule/toggle?source=${encodeURIComponent(sid)}&enabled=${enabled ? 1 : 0}`, { method: 'POST' });
+      }));
+      renderSources();
+    }
+  });
+
+  $('#sourceFilter').addEventListener('input', () => {
+    const q = $('#sourceFilter').value.trim().toLowerCase();
+    $$('.source-row').forEach(row => {
+      const matches = !q || row.querySelector('.source-name').textContent.toLowerCase().includes(q);
+      row.style.display = matches ? '' : 'none';
+    });
+    $$('.region-group').forEach(g => {
+      if (!q) { g.style.display = ''; return; }
+      const anyVisible = Array.from(g.querySelectorAll('.source-row')).some(r => r.style.display !== 'none');
+      g.style.display = anyVisible ? '' : 'none';
+      if (anyVisible) g.classList.add('open');
+    });
+  });
+}
+
+function renderDisabled() {
+  const entries = Object.entries(DISABLED);
+  $('#disabledCount').textContent = `(${entries.length})`;
+  const list = $('#disabledList');
+  list.innerHTML = entries.map(([sid, info]) => `
+    <div class="disabled-row">
+      <div class="dname">${esc(info.name)} <span style="color:var(--muted2);font-weight:400">— ${esc(info.url)}</span></div>
+      <div class="dreason">${esc(info.reason)}</div>
+    </div>`).join('') || '<div class="disabled-row">Ninguna.</div>';
+}
+
+// ── explore tab ──────────────────────────────────────────────────────────
+function renderRegionSelect() {
+  const sel = $('#regionFilter');
+  const groups = buildEffectiveGroups();
+  const order = Object.keys(groups).sort((a, b) => {
+    const ra = (REGION_META[a] || {}).rank ?? 50;
+    const rb = (REGION_META[b] || {}).rank ?? 50;
+    return ra - rb;
+  });
+  for (const gkey of order) {
+    const info = groups[gkey];
+    const meta = REGION_META[gkey] || {};
+    const label = meta.label || info.label || gkey;
+    for (const sid of info.sources) {
+      const opt = document.createElement('option');
+      opt.value = sid;
+      opt.textContent = `${label} — ${sid}`;
+      sel.appendChild(opt);
+    }
+  }
+}
+
+$('#filtersToggle').addEventListener('click', () => {
+  const panel = $('#filtersPanel');
+  panel.classList.toggle('open');
+  $('#filtersToggle').classList.toggle('on', panel.classList.contains('open'));
+});
+
+let searchDebounce = null;
+$('#q').addEventListener('input', () => {
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => runSearch(true), 350);
+});
+['titleOnly', 'dateFrom', 'dateTo', 'regionFilter'].forEach(id => {
+  $('#' + id).addEventListener('change', () => runSearch(true));
+});
+
+function buildSearchParams(offset) {
+  const params = new URLSearchParams();
+  params.set('source', $('#regionFilter').value || 'all');
+  const q = $('#q').value.trim();
+  if (q) params.set('q', q);
+  if (q && $('#titleOnly').checked) params.set('title_only', '1');
+  if ($('#dateFrom').value) params.set('date_from', $('#dateFrom').value);
+  if ($('#dateTo').value) params.set('date_to', $('#dateTo').value);
+  params.set('limit', PAGE_SIZE);
+  params.set('offset', offset);
+  return params;
+}
+
+async function runSearch(reset) {
+  if (reset) { searchOffset = 0; $('#results').innerHTML = ''; }
+  const params = buildSearchParams(searchOffset);
+  $('#resultMeta').textContent = 'Buscando…';
+  let data;
+  try {
+    const res = await fetch('/api/search?' + params.toString());
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'error');
+  } catch (e) {
+    $('#resultMeta').textContent = 'Error: ' + e.message;
+    return;
+  }
+  searchTotal = data.total;
+  $('#resultMeta').textContent = `${data.total.toLocaleString('es-CL')} resultado(s)`;
+  const exportParams = new URLSearchParams(params); exportParams.delete('limit'); exportParams.delete('offset');
+  $('#exportLink').href = '/api/export.csv?' + exportParams.toString();
+
+  appendResults(data.rows);
+  searchOffset += data.rows.length;
+  $('#loadMoreWrap').style.display = (searchOffset < searchTotal && data.rows.length) ? '' : 'none';
+  if (reset && !data.rows.length) {
+    $('#results').innerHTML = '<div class="empty-state">Sin resultados.</div>';
+  }
+}
+$('#loadMoreBtn').addEventListener('click', () => runSearch(false));
+
+function appendResults(rows) {
+  const wrap = $('#results');
+  for (const r of rows) {
+    const key = `${r.source_id}-${r.id}`;
+    const card = document.createElement('div');
+    card.className = 'article-card';
+    card.dataset.key = key;
+    card.innerHTML = `
+      <div class="article-top">
+        <span class="pill">${esc(r.source || r.source_id)}</span>
+        <span class="pill date">${esc(r.date)}</span>
+      </div>
+      <div class="article-title">${esc(r.title || '(sin título)')}</div>
+      <div class="article-snippet">${esc(r.snippet)}${r.snippet && r.snippet.length >= 280 ? '…' : ''}</div>
+      <div class="article-detail" data-loaded="0"></div>`;
+    card.addEventListener('click', (e) => toggleDetail(card, r.source_id, r.id));
+    wrap.appendChild(card);
+  }
+}
+
+async function toggleDetail(card, sourceId, id) {
+  const key = `${sourceId}-${id}`;
+  const detail = card.querySelector('.article-detail');
+  if (openDetailKey && openDetailKey !== key) {
+    const prev = document.querySelector(`.article-card[data-key="${openDetailKey}"] .article-detail`);
+    if (prev) prev.classList.remove('open');
+  }
+  if (detail.classList.contains('open')) {
+    detail.classList.remove('open');
+    openDetailKey = null;
+    return;
+  }
+  detail.classList.add('open');
+  openDetailKey = key;
+  if (detail.dataset.loaded === '1') return;
+  detail.innerHTML = '<div style="color:var(--muted)">Cargando…</div>';
+  try {
+    const res = await fetch(`/api/article/${sourceId}/${id}`);
+    const a = await res.json();
+    if (!res.ok) throw new Error(a.error || 'error');
+    detail.innerHTML = `
+      ${a.image_local_path ? `<img src="/api/image/${a.image_local_path}" loading="lazy">` : ''}
+      <div class="meta-line">${a.author ? esc(a.author) + ' · ' : ''}${esc(a.section || '')} · ${esc(a.date)}</div>
+      <div class="body-text">${esc(a.body_text || '(sin texto)')}</div>
+      <a class="orig-link" href="${esc(a.url)}" target="_blank" rel="noopener">Ver original ↗</a>`;
+    detail.dataset.loaded = '1';
+  } catch (e) {
+    detail.innerHTML = `<div style="color:var(--err)">Error al cargar.</div>`;
+  }
+}
+
+boot();
+</script>
+</body>
+</html>
