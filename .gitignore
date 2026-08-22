@@ -13,6 +13,7 @@ logs/
 deploy/logs_*.log
 deploy/.ovejero_gapfill_progress.json
 deploy/.quality_check_report.json
+deploy/.historical_backfill_progress.json
 
 # ── Environment / OS ────────────────────────────────────
 .env
