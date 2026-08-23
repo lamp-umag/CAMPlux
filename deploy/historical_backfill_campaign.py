@@ -15,15 +15,20 @@ rather than re-running them.
 
 Paced deliberately per explicit user instruction ("go little by little...
 do 3 of them, wait, see how they go, keep iterating"), not a blind mass
-launch: BATCH_SIZE sources at a time (concurrent within a batch, via
-threads each consuming their own /archive SSE stream), region by region
-in the same smallest-to-biggest population order as the rest of the
-campaign, with a pause between batches. Re-checks each source's own
-current state (not the state when this script started) before deciding
-to skip it -- safe to re-run, safe if the user or another process backfills
-something manually in the meantime ("I might have started some before").
-Skips anything currently locked (someone/something else already working
-on it) rather than fighting over it.
+launch: never more than BATCH_SIZE sources running at once, region by
+region in the same smallest-to-biggest population order as the rest of
+the campaign. Uses a rolling worker pool (ThreadPoolExecutor), not fixed
+batch-then-wait-for-all-three -- confirmed live 2026-08-23 that job size
+varies wildly (some sources: under a minute; others: 3000+ seconds), so a
+fixed batch left two workers sitting idle for up to an hour waiting on
+the third instead of picking up the next source. A rolling pool keeps the
+same "never more than 3 at once" safety property while not wasting that
+idle time. Re-checks each source's own current state (not the state when
+this script started) before deciding to skip it -- safe to re-run, safe
+if the user or another process backfills something manually in the
+meantime ("I might have started some before"). Skips anything currently
+locked (someone/something else already working on it) rather than
+fighting over it.
 
 Progress is persisted per-source outcome in
 deploy/logs_historical_backfill.log and a JSON summary in
@@ -44,6 +49,7 @@ import os
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
@@ -52,8 +58,7 @@ PROGRESS_PATH = os.path.join(HERE, ".historical_backfill_progress.json")
 LOG_PATH = os.path.join(HERE, "logs_historical_backfill.log")
 
 VAULT_BASE = "http://127.0.0.1:5001"
-BATCH_SIZE = 3
-PAUSE_BETWEEN_BATCHES_S = 20
+BATCH_SIZE = 3  # concurrent worker pool size, see main()
 PER_SOURCE_TIMEOUT_S = 3 * 3600  # a single big mode=full (e.g. g5noticias'
                                   # 218k posts) can legitimately run for
                                   # hours -- generous ceiling, not a tight one
@@ -117,7 +122,7 @@ def needs_backfill(source_id):
     return True, f"min_date actual {min_d}, archive_start esperado {arch_start}"
 
 
-def run_one_backfill(region, source_id, results):
+def run_one_backfill(region, source_id):
     url = f"{VAULT_BASE}/archive"
     params = {"source": source_id, "mode": "full", "delay": "1.0"}
     t0 = time.time()
@@ -136,26 +141,40 @@ def run_one_backfill(region, source_id, results):
                     last_done = evt
             elapsed = time.time() - t0
             if last_done is None:
-                results[source_id] = {"status": "error", "note": "stream ended without a done event",
-                                       "elapsed_s": round(elapsed)}
                 log(f"  ✗ {source_id}: sin evento final tras {elapsed:.0f}s")
+                return source_id, {"status": "error", "note": "stream ended without a done event",
+                                    "elapsed_s": round(elapsed)}
             elif last_done.get("job_status") == "locked":
-                results[source_id] = {"status": "locked", "elapsed_s": round(elapsed)}
                 log(f"  ⚠ {source_id}: bloqueado por otro proceso, se reintentará otra vez")
+                return source_id, {"status": "locked", "elapsed_s": round(elapsed)}
             else:
-                results[source_id] = {
+                log(f"  ✓ {source_id}: guardados {last_done.get('saved')}, total en DB "
+                    f"{last_done.get('total_db')}, rango {last_done.get('min_date')} -> "
+                    f"{last_done.get('max_date')} ({elapsed:.0f}s)")
+                return source_id, {
                     "status": "done", "elapsed_s": round(elapsed),
                     "seen": last_done.get("seen"), "saved": last_done.get("saved"),
                     "total_db": last_done.get("total_db"),
                     "min_date": last_done.get("min_date"), "max_date": last_done.get("max_date"),
                 }
-                log(f"  ✓ {source_id}: guardados {last_done.get('saved')}, total en DB "
-                    f"{last_done.get('total_db')}, rango {last_done.get('min_date')} -> "
-                    f"{last_done.get('max_date')} ({elapsed:.0f}s)")
     except Exception as e:
         elapsed = time.time() - t0
-        results[source_id] = {"status": "error", "note": str(e), "elapsed_s": round(elapsed)}
         log(f"  ✗ {source_id}: error tras {elapsed:.0f}s -- {e}")
+        return source_id, {"status": "error", "note": str(e), "elapsed_s": round(elapsed)}
+
+
+def process_source(region, source_id):
+    """Submitted to the worker pool per-source -- the needs_backfill live
+    check happens here, right when a worker actually picks this item up,
+    not at initial submission (submission happens for the whole queue at
+    once; a source's lock/completeness state could genuinely change in
+    the hours it takes the pool to get around to it)."""
+    need, reason = needs_backfill(source_id)
+    if not need:
+        log(f"  ⏭ {source_id}: {reason}")
+        return source_id, {"status": "skipped", "note": reason,
+                            "checked_at": datetime.datetime.now().isoformat(timespec="seconds")}
+    return run_one_backfill(region, source_id)
 
 
 def main():
@@ -165,48 +184,17 @@ def main():
 
     pending = [(region, sid) for region, sid in queue if progress.get(sid, {}).get("status") != "done"]
     log(f"{len(queue) - len(pending)} already marked done in a prior session, {len(pending)} left to check.")
+    log(f"Rolling pool of {BATCH_SIZE} workers -- never more than {BATCH_SIZE} sources running "
+        f"at once, but a freed worker picks up the next queued source immediately instead of "
+        f"waiting for its original batch-mates to finish.")
 
-    current_region = None
-    i = 0
-    while i < len(pending):
-        batch = pending[i:i + BATCH_SIZE]
-        i += BATCH_SIZE
-
-        if batch[0][0] != current_region:
-            current_region = batch[0][0]
-            log(f"--- región: {current_region} ---")
-
-        to_run = []
-        for region, sid in batch:
-            need, reason = needs_backfill(sid)
-            if not need:
-                log(f"  ⏭ {sid}: {reason}")
-                progress[sid] = {"status": "skipped", "note": reason,
-                                  "checked_at": datetime.datetime.now().isoformat(timespec="seconds")}
-                save_progress(progress)
-            else:
-                to_run.append((region, sid))
-
-        if not to_run:
-            continue
-
-        log(f"Batch: {[sid for _, sid in to_run]}")
-        results = {}
-        threads = [threading.Thread(target=run_one_backfill, args=(region, sid, results))
-                   for region, sid in to_run]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        for sid, outcome in results.items():
-            outcome["checked_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+    with ThreadPoolExecutor(max_workers=BATCH_SIZE) as pool:
+        futures = {pool.submit(process_source, region, sid): sid for region, sid in pending}
+        for future in as_completed(futures):
+            sid, outcome = future.result()
+            outcome.setdefault("checked_at", datetime.datetime.now().isoformat(timespec="seconds"))
             progress[sid] = outcome
-        save_progress(progress)
-
-        if i < len(pending):
-            log(f"Pausa de {PAUSE_BETWEEN_BATCHES_S}s antes del siguiente lote…")
-            time.sleep(PAUSE_BETWEEN_BATCHES_S)
+            save_progress(progress)
 
     done = sum(1 for v in progress.values() if v.get("status") == "done")
     skipped = sum(1 for v in progress.values() if v.get("status") == "skipped")

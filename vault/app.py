@@ -1692,4 +1692,13 @@ if __name__ == "__main__":
     # waitress, not Flask's dev server: debug=True exposes an interactive
     # Python console on unhandled exceptions -- fine on localhost-only, a
     # real problem once this is reachable beyond localhost.
-    serve(app, host="0.0.0.0", port=5001, threads=4)
+    # threads=4 was starving the whole app: a single long-lived /archive or
+    # /images/backfill SSE stream holds its worker thread for the entire
+    # scrape (minutes to hours for a big source) -- confirmed live
+    # 2026-08-23 that running just 6 concurrent campaign scrapes (2
+    # campaigns x 3 workers each) was enough to make even a trivial
+    # /schedule/locks request hang indefinitely with all 4 threads pinned.
+    # Threads themselves are cheap (no real memory cost at this count);
+    # the actual constraint on this host is available RAM/swap, unrelated
+    # to thread count.
+    serve(app, host="0.0.0.0", port=5001, threads=16)

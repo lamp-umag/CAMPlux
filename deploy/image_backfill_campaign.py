@@ -33,6 +33,7 @@ import json
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
@@ -40,8 +41,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PROGRESS_PATH = os.path.join(HERE, ".image_backfill_progress.json")
 
 VAULT_BASE = "http://127.0.0.1:5001"
-BATCH_SIZE = 3
-PAUSE_BETWEEN_BATCHES_S = 15
+BATCH_SIZE = 3  # concurrent worker pool size, see main()
 CALL_LIMIT = 200
 MAX_NO_PROGRESS_CALLS = 3  # give up on a source (for this pass) after this
                             # many consecutive calls download 0 new images
@@ -88,11 +88,19 @@ def build_queue():
     return queue
 
 
-def backfill_one_source(region, source_id, results):
+def backfill_one_source(region, source_id):
+    """Runs to completion (or gives up) for one source, entirely on its own
+    thread -- returns its outcome dict rather than writing into shared
+    state, so the caller can use a rolling worker pool instead of waiting
+    for a fixed batch. A source with a huge backlog (elpinguino: ~190k
+    missing images) can legitimately take hours; with a rolling pool that
+    only ties up one of the worker slots instead of blocking everyone
+    else in a fixed batch until the slowest one finishes."""
     total_downloaded = 0
     no_progress_streak = 0
     calls = 0
     t0 = time.time()
+    log(f"  ▶ {source_id} ({region}): iniciando")
     while True:
         calls += 1
         try:
@@ -108,23 +116,20 @@ def backfill_one_source(region, source_id, results):
                 except ValueError:
                     continue
                 if evt.get("type") == "log" and "locked by" in evt.get("msg", ""):
-                    results[source_id] = {"status": "locked", "downloaded": total_downloaded,
-                                           "elapsed_s": round(time.time() - t0)}
                     log(f"  ⚠ {source_id}: bloqueado por otro proceso ahora, se reintentará otra vez")
-                    return
+                    return source_id, {"status": "locked", "downloaded": total_downloaded,
+                                        "elapsed_s": round(time.time() - t0)}
                 if evt.get("type") == "done":
                     last_done = evt
         except Exception as e:
-            results[source_id] = {"status": "error", "note": str(e), "downloaded": total_downloaded,
-                                   "elapsed_s": round(time.time() - t0)}
             log(f"  ✗ {source_id}: error tras {calls} llamada(s) -- {e}")
-            return
+            return source_id, {"status": "error", "note": str(e), "downloaded": total_downloaded,
+                                "elapsed_s": round(time.time() - t0)}
 
         if last_done is None:
-            results[source_id] = {"status": "error", "note": "no done event",
-                                   "downloaded": total_downloaded, "elapsed_s": round(time.time() - t0)}
             log(f"  ✗ {source_id}: sin evento final")
-            return
+            return source_id, {"status": "error", "note": "no done event",
+                                "downloaded": total_downloaded, "elapsed_s": round(time.time() - t0)}
 
         downloaded_this_call = last_done.get("downloaded", 0)
         total_downloaded += downloaded_this_call
@@ -136,18 +141,16 @@ def backfill_one_source(region, source_id, results):
             no_progress_streak = 0
 
         if remaining == 0:
-            results[source_id] = {"status": "done", "downloaded": total_downloaded,
-                                   "calls": calls, "elapsed_s": round(time.time() - t0)}
             log(f"  ✓ {source_id}: completo -- {total_downloaded} imágenes descargadas en {calls} llamada(s)")
-            return
+            return source_id, {"status": "done", "downloaded": total_downloaded,
+                                "calls": calls, "elapsed_s": round(time.time() - t0)}
 
         if no_progress_streak >= MAX_NO_PROGRESS_CALLS:
-            results[source_id] = {"status": "stuck", "downloaded": total_downloaded,
-                                   "remaining": remaining, "calls": calls,
-                                   "elapsed_s": round(time.time() - t0)}
             log(f"  ⚠ {source_id}: {no_progress_streak} llamadas seguidas sin descargar nada "
                 f"({remaining} restantes) -- se deja para otra pasada")
-            return
+            return source_id, {"status": "stuck", "downloaded": total_downloaded,
+                                "remaining": remaining, "calls": calls,
+                                "elapsed_s": round(time.time() - t0)}
         # else: real progress being made, keep looping this source
 
 
@@ -158,34 +161,20 @@ def main():
 
     pending = [(region, sid) for region, sid in queue if progress.get(sid, {}).get("status") != "done"]
     log(f"{len(queue) - len(pending)} already marked done, {len(pending)} left to check.")
+    log(f"Rolling pool of {BATCH_SIZE} workers -- a big source (e.g. elpinguino, ~190k missing "
+        f"images) ties up one slot for a long time without blocking the other two from moving "
+        f"on to the next source in the queue, unlike a fixed batch-of-3-then-wait approach.")
 
-    current_region = None
-    i = 0
-    while i < len(pending):
-        batch = pending[i:i + BATCH_SIZE]
-        i += BATCH_SIZE
-
-        if batch[0][0] != current_region:
-            current_region = batch[0][0]
-            log(f"--- región/grupo: {current_region} ---")
-
-        log(f"Batch: {[sid for _, sid in batch]}")
-        results = {}
-        threads = [threading.Thread(target=backfill_one_source, args=(region, sid, results))
-                   for region, sid in batch]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        for sid, outcome in results.items():
+    # Submit everything up front; ThreadPoolExecutor's own internal queue
+    # feeds each freed worker the next pending item automatically -- this
+    # IS the rolling-pool behavior, no manual batching needed.
+    with ThreadPoolExecutor(max_workers=BATCH_SIZE) as pool:
+        futures = {pool.submit(backfill_one_source, region, sid): sid for region, sid in pending}
+        for future in as_completed(futures):
+            sid, outcome = future.result()
             outcome["checked_at"] = datetime.datetime.now().isoformat(timespec="seconds")
             progress[sid] = outcome
-        save_progress(progress)
-
-        if i < len(pending):
-            log(f"Pausa de {PAUSE_BETWEEN_BATCHES_S}s antes del siguiente lote…")
-            time.sleep(PAUSE_BETWEEN_BATCHES_S)
+            save_progress(progress)
 
     done = sum(1 for v in progress.values() if v.get("status") == "done")
     stuck = sum(1 for v in progress.values() if v.get("status") == "stuck")
