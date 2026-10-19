@@ -107,8 +107,26 @@ services:
     env_file:
       - .env
     ports:
-      - "127.0.0.1:5081:5081"
-      - "127.0.0.1:5082:5082"
+      # Bind to all interfaces (0.0.0.0), not just 127.0.0.1 -- this also
+      # covers loopback, so another computer on the same LAN can reach it
+      # directly without going through Tailscale Funnel/the public ts.net
+      # domain. Same Basic Auth either way (Caddyfile applies it regardless
+      # of which interface was hit).
+      #
+      # NOT a specific LAN IP (e.g. "10.2.171.152:5081:5081") -- that's a
+      # DHCP lease and changes over time; when it did, Docker couldn't bind
+      # it on container start and the WHOLE caddy container failed to come
+      # up (exit 255, "cannot assign requested address"), silently killing
+      # Tailscale Funnel access too since Caddy is what the funnel proxies
+      # to. Confirmed live 2026-10-19: broken for 6 weeks before caught.
+      #
+      # ALSO NOT two separate ingress entries for the same container port
+      # (one "127.0.0.1:5081:5081" + one "5081:5081") -- tried that first,
+      # Docker silently produced ZERO working mappings for either (empty
+      # NetworkSettings.Ports, no error) even though 0.0.0.0 alone works
+      # fine and already covers 127.0.0.1. One entry per port only.
+      - "5081:5081"
+      - "5082:5082"
     depends_on:
       - vault
       - quarry
